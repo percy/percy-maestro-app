@@ -1,0 +1,6 @@
+---
+- takeScreenshot: ${SCREENSHOT_NAME}
+- runScript:
+    file: ../scripts/percy-screenshot.js
+    env:
+      SCREENSHOT_PATH: ../../.maestro/${SCREENSHOT_NAME}.png
