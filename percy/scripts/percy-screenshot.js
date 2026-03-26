@@ -24,8 +24,9 @@ try {
     if (!SCREENSHOT_PATH.endsWith(".png")) {
       throw new Error("SCREENSHOT_PATH must end with .png");
     }
-    if (SCREENSHOT_PATH.indexOf("..") !== -1) {
-      throw new Error("SCREENSHOT_PATH must not contain '..'");
+    // Validate SCREENSHOT_NAME doesn't contain path traversal (user-controlled input)
+    if (SCREENSHOT_NAME.indexOf("..") !== -1 || SCREENSHOT_NAME.indexOf("/") !== -1) {
+      throw new Error("SCREENSHOT_NAME must not contain '..' or '/'");
     }
 
     // Read optional device metadata
