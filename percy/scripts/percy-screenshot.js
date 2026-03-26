@@ -30,7 +30,7 @@ try {
     }
 
     // Read optional device metadata
-    var deviceName = "";
+    var deviceName = "Unknown Device";
     if (typeof PERCY_DEVICE_NAME !== "undefined" && PERCY_DEVICE_NAME) {
       deviceName = PERCY_DEVICE_NAME;
     }
