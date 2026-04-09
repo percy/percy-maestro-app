@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- [Percy CLI](https://github.com/percy/cli) with multipart upload support
+- [Percy CLI](https://github.com/percy/cli) with maestro-screenshot relay support
 - [Maestro](https://maestro.mobile.dev/) 2.0+
 - An Android app under test
 
@@ -79,8 +79,11 @@ npx percy app:exec -- maestro test your-flow.yaml
 
 Device metadata and other options are passed as environment variables to your Maestro flow.
 
+### Core Options
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `SCREENSHOT_NAME` | Yes (per screenshot) | - | Name for the screenshot; must be unique per snapshot |
 | `PERCY_SERVER` | No | `http://percy.cli:5338` | Percy CLI server address |
 | `PERCY_DEVICE_NAME` | Yes | - | Device name for the Percy tag (e.g. `Pixel 7`) |
 | `PERCY_OS_VERSION` | Yes | - | Android OS version (e.g. `13`) |
@@ -89,7 +92,17 @@ Device metadata and other options are passed as environment variables to your Ma
 | `PERCY_ORIENTATION` | No | `portrait` | Screen orientation (`portrait` or `landscape`) |
 | `PERCY_TEST_CASE` | No | - | Test case name for grouping snapshots |
 | `PERCY_LABELS` | No | - | Comma-separated labels for the snapshot |
-| `SCREENSHOT_NAME` | Yes (per screenshot) | - | Name for the screenshot; must be unique per snapshot |
+
+### Comparison Options
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `PERCY_REGIONS` | No | - | JSON array of regions for ignore/consider (see [Regions](#regions)) |
+| `PERCY_SYNC` | No | `false` | Set to `"true"` to wait for comparison result and log details |
+| `PERCY_STATUS_BAR_HEIGHT` | No | `0` | Status bar height in pixels (excluded from comparison tile) |
+| `PERCY_NAV_BAR_HEIGHT` | No | `0` | Navigation bar height in pixels (excluded from comparison tile) |
+| `PERCY_FULLSCREEN` | No | `false` | Set to `"true"` if the screenshot is fullscreen (no system chrome) |
+| `PERCY_TH_TEST_CASE_EXECUTION_ID` | No | - | Test harness execution ID for CI/CD correlation |
 
 Pass environment variables when running Maestro:
 
@@ -99,8 +112,88 @@ npx percy app:exec -- maestro test \
   -e PERCY_OS_VERSION="13" \
   -e PERCY_SCREEN_WIDTH="1080" \
   -e PERCY_SCREEN_HEIGHT="2400" \
+  -e PERCY_STATUS_BAR_HEIGHT="50" \
+  -e PERCY_NAV_BAR_HEIGHT="48" \
   your-flow.yaml
 ```
+
+## Regions
+
+Regions let you control which parts of a screenshot Percy compares. Each region specifies an area and an algorithm.
+
+### Algorithms
+
+| Algorithm | Behavior |
+|-----------|----------|
+| `ignore` | Percy skips this area entirely — any change inside is invisible |
+| `standard` | Percy compares normally with standard diff sensitivity |
+| `intelliignore` | Percy uses AI-powered comparison that ignores dynamic content like ads and carousels |
+| `layout` | Percy checks structural layout but tolerates pixel-level differences |
+
+"Consider region" behavior (focusing comparison on a specific area) is achieved by using `standard` or `intelliignore` on a bounded region.
+
+### Element-based regions (recommended)
+
+Identify regions by Android view hierarchy attributes. The Percy CLI resolves elements to bounding boxes via ADB.
+
+```yaml
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: HomeScreen
+      PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/clock"},"algorithm":"ignore"}]'
+```
+
+Supported selectors: `resource-id`, `text`, `content-desc`, `class`.
+
+### Coordinate-based regions (fallback)
+
+Specify pixel coordinates directly. Coordinates are relative to the screenshot (0,0 is top-left).
+
+```yaml
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: HomeScreen
+      PERCY_REGIONS: '[{"top":0,"bottom":50,"left":0,"right":1080,"algorithm":"ignore"}]'
+```
+
+### Advanced: per-region configuration
+
+Each region can include fine-grained diff settings:
+
+```yaml
+PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/header"},"algorithm":"standard","configuration":{"diffSensitivity":3,"imageIgnoreThreshold":0.1}}]'
+```
+
+Configuration options: `diffSensitivity` (0-4), `imageIgnoreThreshold` (0-1), `carouselsEnabled`, `bannersEnabled`, `adsEnabled`.
+
+### Multiple regions
+
+```yaml
+PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/clock"},"algorithm":"ignore"},{"element":{"text":"Submit"},"algorithm":"intelliignore"},{"top":0,"bottom":50,"left":0,"right":1080,"algorithm":"ignore"}]'
+```
+
+### Full example with all options
+
+```yaml
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: HomeScreen
+      PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/clock"},"algorithm":"ignore"},{"top":0,"bottom":50,"left":0,"right":1080,"algorithm":"ignore"}]'
+      PERCY_SYNC: "true"
+      PERCY_STATUS_BAR_HEIGHT: "50"
+      PERCY_NAV_BAR_HEIGHT: "48"
+      PERCY_FULLSCREEN: "false"
+      PERCY_TH_TEST_CASE_EXECUTION_ID: "TH-12345"
+```
+
+### Graceful degradation
+
+- Invalid JSON in `PERCY_REGIONS` → warning logged, screenshot uploads without regions
+- Individual malformed regions → skipped with per-region warning, valid regions still sent
+- Invalid bar heights (non-numeric) → silently omitted, defaults apply
 
 ## BrowserStack Integration
 
@@ -110,11 +203,21 @@ You can run Percy Maestro flows on BrowserStack by uploading your Maestro worksp
 
 The Percy Maestro SDK works in two stages:
 
-1. **Initialization** -- The `percy-init` sub-flow runs a healthcheck against the Percy CLI server to verify it is available. If the CLI is not running or not reachable, Percy is silently disabled for the rest of the flow.
+1. **Initialization** -- The `percy-init` sub-flow runs a healthcheck against the Percy CLI server to verify it is available. If the CLI is not running or not reachable, Percy is silently disabled for the rest of the flow. The CLI version and server address are stored for downstream use.
 
-2. **Screenshot capture** -- Each `percy-screenshot` sub-flow call uses Maestro's built-in `takeScreenshot` command to save a PNG to disk, then runs a JS script that uploads the image to the Percy CLI via a multipart POST to `/percy/comparison/upload`. Device metadata (name, OS version, dimensions, orientation) is sent alongside the image as a JSON tag.
+2. **Screenshot capture** -- Each `percy-screenshot` sub-flow call uses Maestro's built-in `takeScreenshot` command to save a PNG to disk, then runs a JS script that sends screenshot metadata (name, session ID, device tag, regions, tile options) as a JSON POST to the Percy CLI's `/percy/maestro-screenshot` relay endpoint. The Percy CLI finds the screenshot file on disk, base64-encodes it, resolves any element-based regions, and uploads the comparison.
 
-The Percy CLI then handles diffing, rendering, and uploading to the Percy service.
+## Features not supported
+
+These features from other Percy SDKs are not applicable to the Maestro environment:
+
+| Feature | Reason |
+|---------|--------|
+| `scrollableXpath` / `scrollableId` / `screenLengths` / `fullPage` | Maestro controls scrolling via YAML `scroll` command. Capture multiple screenshots with scroll steps between them. |
+| `freezeAnimations` / `percyCSS` / `enableJavascript` | DOM/web-specific features. Native mobile screenshots are bitmap captures — no DOM to manipulate. |
+| XPath region selectors | Element resolution uses Android view hierarchy attributes (`resource-id`, `text`, `content-desc`, `class`) via ADB, not XPath expressions. |
+| App Automate features | Maestro uses the generic Percy path, not BrowserStack App Automate. |
+| iOS support | Android-only for now. The healthcheck enforces this. |
 
 ## Links
 

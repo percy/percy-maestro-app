@@ -25,6 +25,8 @@ try {
         console.log("[percy] Percy CLI healthcheck passed.");
       }
       output.percyEnabled = true;
+      output.percyServer = percyServer;
+      output.percyCoreVersion = coreVersion || "";
     } else {
       console.log("[percy] Percy CLI healthcheck failed with status: " + response.status);
       output.percyEnabled = false;

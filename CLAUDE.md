@@ -15,16 +15,16 @@ Users integrate Percy by copying the `percy/` directory into their Maestro proje
 
 ## How It Works
 
-1. **`percy/flows/percy-init.yaml`** → runs `percy-healthcheck.js`. Sets `output.percyEnabled` (persists across subsequent flow steps).
-2. **`percy/flows/percy-screenshot.yaml`** → calls Maestro's `takeScreenshot` (saves to `../../.maestro/${SCREENSHOT_NAME}.png`), then runs `percy-screenshot.js` with `SCREENSHOT_PATH` pointing to that file.
-3. **`percy-screenshot.js`** builds a multipart form (`screenshot` file, `name`, `tag` JSON with device info, `clientInfo`, `environmentInfo`, optional `testCase`/`labels`) and POSTs to `/percy/comparison/upload`.
+1. **`percy/flows/percy-init.yaml`** → runs `percy-healthcheck.js`. Sets `output.percyEnabled`, `output.percyServer`, and `output.percyCoreVersion` (persist across subsequent flow steps).
+2. **`percy/flows/percy-screenshot.yaml`** → calls Maestro's `takeScreenshot` (saves PNG to disk), then runs `percy-screenshot.js`.
+3. **`percy-screenshot.js`** builds a JSON payload (name, sessionId, tag, regions, tile metadata, sync, etc.) and POSTs to `/percy/maestro-screenshot`. The Percy CLI relay finds the screenshot file on disk using the sessionId, base64-encodes it, resolves element-based regions via ADB, and processes the comparison.
 
 The YAML flows use relative paths (`../scripts/...`) — this means the `percy/` directory structure must stay intact.
 
 ## Percy CLI API
 
 - **GET `/percy/healthcheck`** — returns `x-percy-core-version` header on success
-- **POST `/percy/comparison/upload`** — multipart form upload; returns JSON with `link` field on success
+- **POST `/percy/maestro-screenshot`** — JSON relay endpoint; accepts name, sessionId, tag, regions, sync, statusBarHeight, navBarHeight, fullscreen, thTestCaseExecutionId, testCase, labels, clientInfo, environmentInfo. Returns `{ success, link }` (non-sync) or `{ success, data }` (sync).
 
 Default server: `http://percy.cli:5338` (overridable via `PERCY_SERVER` env var).
 
@@ -38,7 +38,8 @@ Default server: `http://percy.cli:5338` (overridable via `PERCY_SERVER` env var)
 - `json()` is a global function to parse JSON strings
 - `maestro.platform` returns "android" or "ios"
 - Prefer `var` over `let`/`const` for maximum compatibility
-- `http.post()` accepts `{ multipartForm: { ... } }` for file uploads; file fields use `{ filePath, mediaType }`
+- `http.post()` accepts `{ multipartForm: { ... } }` for file uploads; file fields use `{ filePath, mediaType }` — **however**, multipartForm filePath is broken on BrowserStack (GraalJS sandbox blocks Java interop, CWD unknown). Use JSON POST to relay endpoint instead.
+- `PERCY_REGIONS` env var accepts a JSON array string. Two region types: element-based `{"element":{"resource-id":"..."},"algorithm":"ignore"}` and coordinate-based `{"top":0,"bottom":100,"left":0,"right":500,"algorithm":"ignore"}`. Algorithms: `ignore`, `layout`, `standard`, `intelliignore`. Optional per-region `configuration`, `padding`, `assertion` objects are passed through.
 
 ## No Build Commands
 
