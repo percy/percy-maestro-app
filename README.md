@@ -6,7 +6,7 @@
 
 - [Percy CLI](https://github.com/percy/cli) with maestro-screenshot relay support
 - [Maestro](https://maestro.mobile.dev/) 2.0+
-- An Android app under test
+- An Android or iOS app under test (iOS supported on BrowserStack real devices)
 
 ## Installation
 
@@ -86,7 +86,7 @@ Device metadata and other options are passed as environment variables to your Ma
 | `SCREENSHOT_NAME` | Yes (per screenshot) | - | Name for the screenshot; must be unique per snapshot |
 | `PERCY_SERVER` | No | `http://percy.cli:5338` | Percy CLI server address |
 | `PERCY_DEVICE_NAME` | Yes | - | Device name for the Percy tag (e.g. `Pixel 7`) |
-| `PERCY_OS_VERSION` | Yes | - | Android OS version (e.g. `13`) |
+| `PERCY_OS_VERSION` | Yes | - | OS version (e.g. `13` for Android, `17` for iOS) |
 | `PERCY_SCREEN_WIDTH` | Yes | - | Screen width in pixels |
 | `PERCY_SCREEN_HEIGHT` | Yes | - | Screen height in pixels |
 | `PERCY_ORIENTATION` | No | `portrait` | Screen orientation (`portrait` or `landscape`) |
@@ -114,6 +114,36 @@ npx percy app:exec -- maestro test \
   -e PERCY_SCREEN_HEIGHT="2400" \
   -e PERCY_STATUS_BAR_HEIGHT="50" \
   -e PERCY_NAV_BAR_HEIGHT="48" \
+  your-flow.yaml
+```
+
+### iOS-specific guidance
+
+The SDK auto-detects the platform via `maestro.platform` — no flag change needed
+between Android and iOS flows.
+
+- **`PERCY_NAV_BAR_HEIGHT`**: iOS has no persistent navigation bar. Omit this env
+  var on iOS flows (the SDK will not add the field; the CLI defaults to 0).
+- **`PERCY_STATUS_BAR_HEIGHT`**: include the notch / Dynamic Island in the value
+  if you want the full safe-area excluded from the comparison tile. Typical values:
+  - iPhone 14 Pro (Dynamic Island): `59`
+  - iPhone 13/14 (notch): `47`
+  - iPhone SE (no notch): `20`
+- **`PERCY_DEVICE_NAME`**: set to the user-visible device name (e.g. `iPhone 15 Pro`).
+- **`PERCY_OS_VERSION`**: iOS major version (e.g. `17`).
+- **`PERCY_SCREEN_WIDTH` / `PERCY_SCREEN_HEIGHT`**: device physical pixel
+  dimensions. These are pixel values, not points — e.g. iPhone 15 Pro is
+  `1179 × 2556` pixels.
+
+Example iOS invocation:
+
+```bash
+npx percy app:exec -- maestro test \
+  -e PERCY_DEVICE_NAME="iPhone 15 Pro" \
+  -e PERCY_OS_VERSION="17" \
+  -e PERCY_SCREEN_WIDTH="1179" \
+  -e PERCY_SCREEN_HEIGHT="2556" \
+  -e PERCY_STATUS_BAR_HEIGHT="59" \
   your-flow.yaml
 ```
 
@@ -217,7 +247,8 @@ These features from other Percy SDKs are not applicable to the Maestro environme
 | `freezeAnimations` / `percyCSS` / `enableJavascript` | DOM/web-specific features. Native mobile screenshots are bitmap captures — no DOM to manipulate. |
 | XPath region selectors | Element resolution uses Android view hierarchy attributes (`resource-id`, `text`, `content-desc`, `class`) via ADB, not XPath expressions. |
 | App Automate features | Maestro uses the generic Percy path, not BrowserStack App Automate. |
-| iOS support | Android-only for now. The healthcheck enforces this. |
+| iOS simulator | BrowserStack runs real iOS devices; the SDK is not tested against simulators. |
+| Element-based regions | Coordinate-based regions only in v0.3.0; element resolution deferred for both platforms. |
 
 ## Links
 
