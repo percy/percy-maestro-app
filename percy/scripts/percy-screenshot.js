@@ -29,7 +29,7 @@ try {
       if (typeof PERCY_DEVICE_NAME !== "undefined" && PERCY_DEVICE_NAME) {
         tag.name = PERCY_DEVICE_NAME;
       }
-      tag.osName = "Android";
+      tag.osName = maestro.platform === "ios" ? "iOS" : "Android";
       if (typeof PERCY_OS_VERSION !== "undefined" && PERCY_OS_VERSION) {
         tag.osVersion = PERCY_OS_VERSION;
       }
@@ -120,7 +120,8 @@ try {
         payload.thTestCaseExecutionId = PERCY_TH_TEST_CASE_EXECUTION_ID;
       }
 
-      payload.clientInfo = "percy-maestro/0.2.0";
+      payload.platform = maestro.platform;
+      payload.clientInfo = "percy-maestro/0.3.0";
       payload.environmentInfo = "percy-maestro";
 
       // POST to the relay endpoint — Percy CLI reads the file from disk

@@ -3,9 +3,9 @@
 // Sets output.percyEnabled = true/false for downstream scripts.
 
 try {
-  // Android-only enforcement
-  if (maestro.platform !== "android") {
-    console.log("[percy] Percy Maestro SDK only supports Android. Disabling Percy.");
+  // Platform allowlist: android and ios. Anything else (e.g., web) disables Percy.
+  if (maestro.platform !== "android" && maestro.platform !== "ios") {
+    console.log("[percy] Percy Maestro SDK supports Android and iOS only. Disabling Percy.");
     output.percyEnabled = false;
   } else {
     // Determine Percy server address
