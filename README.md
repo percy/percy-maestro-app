@@ -162,21 +162,13 @@ Regions let you control which parts of a screenshot Percy compares. Each region 
 
 "Consider region" behavior (focusing comparison on a specific area) is achieved by using `standard` or `intelliignore` on a bounded region.
 
-### Element-based regions (recommended)
+### Element-based regions (deferred)
 
-Identify regions by Android view hierarchy attributes. The Percy CLI resolves elements to bounding boxes via ADB.
+Element-based region resolution is **deferred for both Android and iOS** — the SDK accepts the shape in `PERCY_REGIONS` but currently logs a warning and skips them. Future work is tracked for Android (ADB-based resolver) and iOS (WebDriverAgent-based resolver); both need per-platform selector dialects and scale-factor handling, so they are planned as a later release.
 
-```yaml
-- runFlow:
-    file: percy/flows/percy-screenshot.yaml
-    env:
-      SCREENSHOT_NAME: HomeScreen
-      PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/clock"},"algorithm":"ignore"}]'
-```
+For now, use coordinate-based regions (below) on both platforms.
 
-Supported selectors: `resource-id`, `text`, `content-desc`, `class`.
-
-### Coordinate-based regions (fallback)
+### Coordinate-based regions
 
 Specify pixel coordinates directly. Coordinates are relative to the screenshot (0,0 is top-left).
 
@@ -227,7 +219,60 @@ PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/clock"},"algorithm":"igno
 
 ## BrowserStack Integration
 
-You can run Percy Maestro flows on BrowserStack by uploading your Maestro workspace (including the `percy/` directory) as a zip to the BrowserStack Maestro API. See the [BrowserStack Maestro documentation](https://www.browserstack.com/docs/app-automate/maestro/getting-started) for details.
+You can run Percy Maestro flows on BrowserStack by uploading your Maestro workspace (including the `percy/` directory) as a zip to the BrowserStack Maestro API.
+
+### Enabling Percy in a BrowserStack build
+
+The way you enable Percy in the BrowserStack Maestro build API **differs between iOS and Android**. Android uses `percyOptions`; iOS uses `appPercy`. This asymmetry is intentional — `appPercy` matches BrowserStack's iOS convention (as used by the `percy-xcui-swift` SDK), and Android's `percyOptions` is already in production use.
+
+**Android:**
+
+```bash
+curl -u "$BS_USER:$BS_KEY" \
+  -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app": "<APP_URL>",
+    "testSuite": "<TEST_SUITE_URL>",
+    "devices": ["Samsung Galaxy S22-13.0"],
+    "project": "my-percy-maestro-project",
+    "percyOptions": {
+      "enabled": true,
+      "percyToken": "<PERCY_TOKEN>"
+    }
+  }'
+```
+
+**iOS:**
+
+```bash
+curl -u "$BS_USER:$BS_KEY" \
+  -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/ios/build" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app": "<APP_URL>",
+    "testSuite": "<TEST_SUITE_URL>",
+    "devices": ["iPhone 14-16"],
+    "project": "my-percy-maestro-project",
+    "appPercy": {
+      "PERCY_TOKEN": "<PERCY_TOKEN>",
+      "env": {
+        "PERCY_BRANCH": "main"
+      }
+    }
+  }'
+```
+
+On iOS, the `appPercy.env` sub-object can carry any `PERCY_*` environment variable your Percy build should see — commonly `PERCY_BRANCH`, `PERCY_PROJECT`, `PERCY_COMMIT`. These values are forwarded into the Percy CLI's environment on the BrowserStack host.
+
+**Note on naming:** BrowserStack's public-API parameter is camelCase (`appPercy`). On the BrowserStack host, it is translated to snake_case (`app_percy`) in internal session params. Customers pass `appPercy`; the translation is automatic.
+
+### Percy token hygiene
+
+- **Use a per-project Percy token** when running on BrowserStack App Automate. The token transits BrowserStack infrastructure to reach the Percy CLI on the host. Don't reuse an org-scoped master token for CI builds — use a project-scoped token you can rotate independently.
+- **`appPercy.env` safe-character guidance:** values should contain only alphanumeric characters plus `.`, `_`, `-`. Branch names like `main`, `feature/abc_1`, project slugs, and commit SHAs all fit. Avoid spaces, quotes, semicolons, backticks, and other shell metacharacters — they can cause unexpected behavior in the env-forwarding mechanism.
+
+See the [BrowserStack Maestro documentation](https://www.browserstack.com/docs/app-automate/maestro/getting-started) for the general upload/build flow.
 
 ## How it works
 
@@ -245,10 +290,11 @@ These features from other Percy SDKs are not applicable to the Maestro environme
 |---------|--------|
 | `scrollableXpath` / `scrollableId` / `screenLengths` / `fullPage` | Maestro controls scrolling via YAML `scroll` command. Capture multiple screenshots with scroll steps between them. |
 | `freezeAnimations` / `percyCSS` / `enableJavascript` | DOM/web-specific features. Native mobile screenshots are bitmap captures — no DOM to manipulate. |
-| XPath region selectors | Element resolution uses Android view hierarchy attributes (`resource-id`, `text`, `content-desc`, `class`) via ADB, not XPath expressions. |
+| XPath region selectors | Element resolution on Android uses view hierarchy attributes (`resource-id`, `text`, `content-desc`, `class`) via ADB. On iOS, element resolution would use WebDriverAgent selectors (`accessibility_id`, `predicate`, etc.). Both are deferred — see the Element-based regions note above. |
 | App Automate features | Maestro uses the generic Percy path, not BrowserStack App Automate. |
 | iOS simulator | BrowserStack runs real iOS devices; the SDK is not tested against simulators. |
-| Element-based regions | Coordinate-based regions only in v0.3.0; element resolution deferred for both platforms. |
+| Element-based regions | Coordinate-based regions only; element resolution deferred for both platforms. See [Regions](#regions) for details. |
+| Auto-detect device metadata on iOS | Maestro's GraalJS sandbox blocks native iOS bindings (`uname`, `UIDevice.current`, `XCUIDevice.shared.orientation`) that SDKs like `percy-xcui-swift` use. Pass `PERCY_DEVICE_NAME`, `PERCY_OS_VERSION`, `PERCY_SCREEN_WIDTH`, `PERCY_SCREEN_HEIGHT`, `PERCY_ORIENTATION` via flow env vars instead. |
 
 ## Links
 

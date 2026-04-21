@@ -50,3 +50,16 @@ There is no build system. To test, run Maestro flows that reference the scripts 
 - **Android**: `tag.osName = "Android"`, `PERCY_NAV_BAR_HEIGHT` typically `48`, relay glob pattern `/tmp/{sessionId}_test_suite/logs/*/screenshots/`.
 - **iOS**: `tag.osName = "iOS"`, `PERCY_NAV_BAR_HEIGHT` typically omitted (no persistent nav bar), `PERCY_STATUS_BAR_HEIGHT` should include notch/Dynamic Island on modern iPhones. Relay glob pattern `/tmp/{sessionId}/*_maestro_debug_*/`. iOS hosts run macOS; `/tmp` symlinks to `/private/tmp` — relay handles this via `realpath` on both file and session root.
 - SDK itself has no platform-specific branching beyond `tag.osName` and `payload.platform`; all env vars work identically across both platforms.
+
+### BrowserStack build-API payload asymmetry
+
+The way customers enable Percy in the BrowserStack Maestro build API differs between platforms:
+
+| Platform | Build endpoint | Percy enablement key |
+|---|---|---|
+| Android | `POST /app-automate/maestro/v2/android/build` | `percyOptions: {enabled, percyToken}` |
+| iOS | `POST /app-automate/maestro/v2/ios/build` | `appPercy: {PERCY_TOKEN, env: {...}}` |
+
+iOS matches the convention used by `percy-xcui-swift` (canonical iOS Percy SDK). Android's `percyOptions` is the established Android-path shape. Both are translated by BrowserStack's appautomate bridge into realmobile's snake_case `@params['app_percy']` hash before reaching `MaestroSession#start`.
+
+On both platforms, `realmobile`'s `AppPercy::CLIManager#start_percy_cli` iterates `@params['app_percy']['env']` keys and prefixes them as `KEY='VALUE'` onto the `percy app exec:start` subprocess command line — this is how `PERCY_BRANCH`, `PERCY_PROJECT`, `PERCY_COMMIT` and similar values reach the Percy CLI's environment.

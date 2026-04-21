@@ -6,7 +6,8 @@
 
 try {
   if (!output.percyEnabled) {
-    console.log("[percy] Skipping screenshot — Percy is not enabled (run percy-init first)");
+    var skipName = (typeof SCREENSHOT_NAME !== "undefined" && SCREENSHOT_NAME) ? SCREENSHOT_NAME : "(unnamed)";
+    console.log("[percy] SKIPPED snapshot \"" + skipName + "\" — Percy disabled (see [percy] DISABLED banner above)");
   } else {
     var percyServer = output.percyServer || "http://percy.cli:5338";
 
@@ -121,7 +122,7 @@ try {
       }
 
       payload.platform = maestro.platform;
-      payload.clientInfo = "percy-maestro/0.3.0";
+      payload.clientInfo = "percy-maestro/0.4.0";
       payload.environmentInfo = "percy-maestro";
 
       // POST to the relay endpoint — Percy CLI reads the file from disk
