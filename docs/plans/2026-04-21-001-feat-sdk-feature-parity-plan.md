@@ -1,7 +1,7 @@
 ---
 title: "feat: percy-maestro-android SDK Feature Parity + Element-Based Regions"
 type: feat
-status: active
+status: completed
 date: 2026-04-21
 deepened: 2026-04-21
 origin: docs/brainstorms/2026-04-21-sdk-feature-parity-requirements.md
