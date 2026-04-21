@@ -1,2 +1,4 @@
+appId: _percy_subflow
+name: percy-init
 ---
 - runScript: ../scripts/percy-healthcheck.js
