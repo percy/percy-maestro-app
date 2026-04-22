@@ -1,11 +1,37 @@
 ---
 title: "feat: Tile + Test Metadata Validation Demos (Demo 3 + Demo 4)"
 type: feat
-status: active
+status: completed
 date: 2026-04-22
 deepened: 2026-04-22
+executed: 2026-04-23
 origin: docs/brainstorms/2026-04-22-tile-and-test-metadata-validation-requirements.md
 ---
+
+## Post-Execution Notes (2026-04-23)
+
+Plan shipped, with one material course-correction during execution:
+
+- **Demo 3 pivoted from the deepened two-build design to a single-build feature-forwarding demo.** The original R3/R4 design used a same-branch baseline+compare pair with airplane-mode chrome drift between runs to make `PERCY_STATUS_BAR_HEIGHT` / `PERCY_NAV_BAR_HEIGHT` ignore-band semantics visible in the Percy diff UI. On mid-execution review this was judged over-engineered for the stated scope — "show that the SDK forwards these v0.3.0 fields to Percy end-to-end." The demo that shipped (Percy build #4 below) is a clean single-build capture of three snapshots, each exercising one field. The deeper ignore-band-visible demo is deferred.
+- **`PERCY_LABELS` has a CLI schema gap** uncovered during Demo 4 execution. The SDK forwards `labels: "smoke,home,critical"` correctly per the relay contract, but `percy/core` 1.31.11-beta.0 (deployed on the overlay) rejects it with `Invalid upload options: - labels: unknown property`. Snapshot still uploads, labels silently stripped. Not an SDK bug — needs a percy-core schema update or version bump. Captured in `test/demos/demo-4-test-metadata/notes.md` as a known gap and folded into README's "Under evaluation" row.
+
+**Shipped Percy builds** (host `31.6.63.33:28201FDH300J1S`, device Google Pixel 7 Pro-13.0, project `extraFeatures-fdd21397`):
+
+| Demo | Percy build | BS build id | BS session id |
+|---|---|---|---|
+| Demo 3 (tile metadata) | [#4](https://percy.io/9560f98d/app/extraFeatures-fdd21397/builds/49003917) | `7f02db596b25bafa57a1dad059ca2a926d5c99be` | `79faf7c4bfb15ada16e5eaf9be3f3ecb01269003` |
+| Demo 4 (test metadata) | [#5](https://percy.io/9560f98d/app/extraFeatures-fdd21397/builds/49004182) | `b3fd5e8f384ba900ed98949795fbd61888d5b534` | `abdd66e6a35097e175f6ad584a0969becbd56d77` |
+
+Overlay SHA baseline `88f09ee6d3fbe19e727d33bc9aa84551683b1ad7919cc854be6e4cc1ba029ff7` unchanged post-flight — no shared-infra drift introduced.
+
+**Deferred out of this round, surfaced by execution:**
+
+- Ignore-band visible demo (the original two-build Demo 3). Deferred until it's actually customer-needed or asked for.
+- `labels` CLI schema gap — file a `cli/packages/core` issue; reference Percy build #5 as evidence.
+- `thTestCaseExecutionId` JSON-API confirmation probe — blocked on read-scoped Percy token; write-scoped `app_*` token returned `unauthorized` on `GET /builds/:id/snapshots`. Deferred until admin-token access is available; document-review already established no `percy-api` serializer surfaces the field.
+
+---
+
 
 # feat: Tile + Test Metadata Validation Demos (Demo 3 + Demo 4)
 

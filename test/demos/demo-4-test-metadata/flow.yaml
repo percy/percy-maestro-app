@@ -1,48 +1,44 @@
 appId: org.wikipedia.alpha
 ---
-# Demo 4 — Test Metadata
+# Demo 4 — Test Metadata (single-build feature-forwarding demo)
 #
-# Single-run demo with two screenshots covering:
-#   - PERCY_TEST_CASE    — test-case grouping in the Percy dashboard
-#   - PERCY_LABELS       — split-on-comma rendering (smoke, home, critical
-#                          becomes three tags, not one concatenated string)
-#   - PERCY_TH_TEST_CASE_EXECUTION_ID — payload forwarding to Percy
-#                          (no customer-visible rendering surface exists as
-#                          of 2026-04-22; verified via CLI debug log grep)
+# Two snapshots covering:
+#   - PERCY_TEST_CASE                  (test-case grouping)
+#   - PERCY_LABELS                     (forwarded but currently stripped by
+#                                       percy/core 1.31.11-beta.0 schema —
+#                                       see notes.md Known gap)
+#   - PERCY_TH_TEST_CASE_EXECUTION_ID  (payload forwarding for TestHub
+#                                       integrators; no customer-visible
+#                                       dashboard surface today)
 #
-# Relative paths (`../../../percy/...`) resolve from this file's directory
-# under `test/demos/demo-4-test-metadata/`.
+# For BS dispatch the workspace zip layout mirrors Demo 3:
+#   my-workspace/
+#     flow.yaml  ← this file, staged at the zip root
+#     percy/...
 
-- runFlow: ../../../percy/flows/percy-init.yaml
-
+- runFlow: percy/flows/percy-init.yaml
 - launchApp
 
-# First test case: HomeFlow — screenshot of the default landing screen
 - runFlow:
-    file: ../../../percy/flows/percy-screenshot.yaml
+    file: percy/flows/percy-screenshot.yaml
     env:
       SCREENSHOT_NAME: HomeFlow_Landing
       PERCY_TEST_CASE: HomeFlow
       PERCY_LABELS: "smoke,home,critical"
-      PERCY_TH_TEST_CASE_EXECUTION_ID: "TH-DEMO-4-20260422"
+      PERCY_TH_TEST_CASE_EXECUTION_ID: "TH-DEMO-4-20260423"
       PERCY_DEVICE_NAME: "Google Pixel 7 Pro"
       PERCY_OS_VERSION: "13"
       PERCY_SCREEN_WIDTH: "1080"
-      PERCY_SCREEN_HEIGHT: "2400"
+      PERCY_SCREEN_HEIGHT: "2340"
 
-# Navigate to Settings
-- tapOn: "More"
-- tapOn: "Settings"
-
-# Second test case: SettingsFlow — distinct test-case value exercises grouping
 - runFlow:
-    file: ../../../percy/flows/percy-screenshot.yaml
+    file: percy/flows/percy-screenshot.yaml
     env:
-      SCREENSHOT_NAME: SettingsFlow_Main
+      SCREENSHOT_NAME: SecondScreen_Scrolled
       PERCY_TEST_CASE: SettingsFlow
       PERCY_LABELS: "smoke,settings"
-      PERCY_TH_TEST_CASE_EXECUTION_ID: "TH-DEMO-4-20260422"
+      PERCY_TH_TEST_CASE_EXECUTION_ID: "TH-DEMO-4-20260423"
       PERCY_DEVICE_NAME: "Google Pixel 7 Pro"
       PERCY_OS_VERSION: "13"
       PERCY_SCREEN_WIDTH: "1080"
-      PERCY_SCREEN_HEIGHT: "2400"
+      PERCY_SCREEN_HEIGHT: "2340"

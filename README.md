@@ -266,6 +266,7 @@ These are implemented partially or not yet and are expected to land in a future 
 
 | Feature | Status |
 |---------|--------|
+| `PERCY_LABELS` rendering in Percy dashboard | The SDK forwards `labels` to the Percy CLI relay correctly, but `percy/core` 1.31.11-beta.0 (and current stable) rejects `labels` on the snapshot-options schema as `"unknown property"` and strips it client-side. Snapshot still uploads; labels are not stored. Fix is a `percy/core` schema update — not an SDK change. |
 | `/percy/events` failure telemetry | Not yet forwarded by the SDK. |
 | Sync mode (`PERCY_SYNC`) | Implemented in the SDK (accepts the env var and logs the sync result when the relay returns one) but unproven end-to-end on BrowserStack; a prior round saw a 403 on the sync-result query that is believed unrelated backend behavior. |
 | `PERCY_TH_TEST_CASE_EXECUTION_ID` dashboard rendering | The SDK forwards this field to the Percy backend (verified end-to-end). However, no Percy dashboard surface currently renders it — this is a `percy-api` serializer gap, tracked separately from this SDK. TestHub integrators can read the value from the Percy CLI debug log. |

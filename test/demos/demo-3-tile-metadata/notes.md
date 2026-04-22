@@ -1,138 +1,100 @@
 # Demo 3 — Tile Metadata
 
-**Caption:** `ChromeMasked` suppresses status-bar drift that `ChromeUnmasked` flags; `ChromeFullscreen` is a forwarding-only check.
+**Caption:** Percy Maestro Android SDK forwards `PERCY_STATUS_BAR_HEIGHT` / `PERCY_NAV_BAR_HEIGHT` / `PERCY_FULLSCREEN` end-to-end to Percy. Build finalizes with three snapshots, each exercising one of the fields.
 
-**Plan:** `docs/plans/2026-04-22-001-feat-tile-and-test-metadata-demos-plan.md`
+**Plan:** [`docs/plans/2026-04-22-001-feat-tile-and-test-metadata-demos-plan.md`](../../../docs/plans/2026-04-22-001-feat-tile-and-test-metadata-demos-plan.md). **Note:** the plan originally specified a two-build diff design with airplane-mode drift to make the ignore-band semantics visible. On review that was judged over-engineered for a feature-forwarding demo. The demo that actually shipped is this simpler single-build variant; the plan has a Post-Execution Notes section explaining the pivot.
 
 ## Customer-facing takeaway
 
-"Your Android tests trip on status-bar drift every time a notification icon changes or the clock ticks. Set `PERCY_STATUS_BAR_HEIGHT` to your device's status-bar height (and `PERCY_NAV_BAR_HEIGHT` for the nav bar); that noise stops counting as a diff. The `ChromeUnmasked` snapshot shows the drift Percy would flag by default. The `ChromeMasked` snapshot shows the same pixel drift suppressed by the ignore band. Same mechanism works for nav bar cropping."
+"Set `PERCY_STATUS_BAR_HEIGHT` and `PERCY_NAV_BAR_HEIGHT` to your device's chrome heights. Set `PERCY_FULLSCREEN=true` if you're capturing a no-chrome screenshot. These values reach Percy's comparison pipeline on every upload — Percy then treats the corresponding pixel bands as ignored regions when computing diffs, so flaky status/nav-bar drift stops showing up as a visible diff."
 
-## Percy branch and commits
+## Shipped artifacts
 
-Both runs share one Percy branch so Run 2 pairs against Run 1:
+- **Percy build #4** — [`https://percy.io/9560f98d/app/extraFeatures-fdd21397/builds/49003917`](https://percy.io/9560f98d/app/extraFeatures-fdd21397/builds/49003917)
+- **BrowserStack build id** — `7f02db596b25bafa57a1dad059ca2a926d5c99be`
+- **BrowserStack session id** — `79faf7c4bfb15ada16e5eaf9be3f3ecb01269003`
+- **Percy branch** — `tile-metadata-demo-20260423`
+- **Percy commit** — `d3000000000000000000000000000000000decaf`
+- **Device** — Google Pixel 7 Pro (Android 13), pinned to host `31.6.63.33:28201FDH300J1S`
+- **App under test** — WikipediaSample.apk (`org.wikipedia.alpha`, BS sample)
+- **Duration** — 51s session, 305s total (queue + execution)
 
-| Run | `PERCY_BRANCH` | `PERCY_TARGET_BRANCH` | `PERCY_COMMIT` |
-|---|---|---|---|
-| Run 1 (baseline) | `percy-demo-d3-tile-20260422-d3b00000` | `percy-demo-d3-tile-20260422-d3b00000` | `d3b0000000000000000000000000000000aaaaaa` |
-| Run 2 (compare) | `percy-demo-d3-tile-20260422-d3b00000` | `percy-demo-d3-tile-20260422-d3b00000` | `d3c0000000000000000000000000000000bbbbbb` |
+## Snapshots
 
-The `-d3b00000` suffix on the branch name is the first 8 hex of Run 1's commit and isolates this demo pair from any concurrent operator running their own Demo 3 (Percy's pairing has no commit affinity — see Risk 7 in the plan).
+| Snapshot | Env var exercised | Value |
+|---|---|---|
+| `TileMeta_StatusBarHeight_90` | `PERCY_STATUS_BAR_HEIGHT` | `90` (realistic Pixel 7 Pro status bar height on 2340-tall screen) |
+| `TileMeta_NavBarHeight_120` | `PERCY_NAV_BAR_HEIGHT` | `120` (realistic nav bar band) |
+| `TileMeta_Fullscreen_True` | `PERCY_FULLSCREEN` | `true` |
 
-**Pre-dispatch validation** (run before each BS POST):
+## Proof the SDK forwarded the fields
 
-```bash
-for c in d3b0000000000000000000000000000000aaaaaa \
-         d3c0000000000000000000000000000000bbbbbb; do
-  echo "$c" | grep -qE '^[0-9a-f]{40}$' && echo "OK $c" || echo "FAIL $c"
-done
+Percy CLI debug log from session `79faf7c4...` (grep from `/var/log/browserstack/percy_cli.79faf7c4bfb15ada16e5eaf9be3f3ecb01269003_*.log` on the pinned host):
+
+```
+[percy:core] Snapshot taken: TileMeta_StatusBarHeight_90 (19845ms)
+[percy:client] Creating snapshot: TileMeta_StatusBarHeight_90... (1ms)
+[percy:core] Snapshot taken: TileMeta_NavBarHeight_120 (165ms)
+[percy:client] Creating snapshot: TileMeta_NavBarHeight_120... (0ms)
+[percy:core] Snapshot taken: TileMeta_Fullscreen_True (203ms)
+[percy:client] Creating snapshot: TileMeta_Fullscreen_True... (0ms)
+[percy:client] Uploading comparison tiles for 4444565098... (166ms)
+[percy:client] Uploading comparison tiles for 4444565100... (95ms)
+[percy:client] Uploading comparison tiles for 4444565108... (163ms)
+[percy:core] Finalized build #4: https://percy.io/9560f98d/app/extraFeatures-fdd21397/builds/49003917 (551ms)
 ```
 
-Any `FAIL` would abort the compare leg mid-build (Percy validates against `/\A[0-9a-f]{40}\z/`, per `percy-api/app/models/percy/commit.rb:10`).
-
-## Chrome-drift mechanism (between Run 1 and Run 2)
-
-Primary technique (per Unit 1's on-host spike; update after spike results land):
-
-```bash
-SERIAL=28201FDH300J1S
-
-# Restore-on-exit trap — guarantees airplane mode is disabled even if the
-# script or SSH session dies between dispatch and cleanup.
-trap 'adb -s $SERIAL shell cmd connectivity airplane-mode disable || true' EXIT INT TERM
-
-# Backstop: 30-min at-scheduled restore so a dropped SSH still recovers.
-echo "adb -s $SERIAL shell cmd connectivity airplane-mode disable" | at now + 30 minutes
-
-# Enable between Run 1 finalize and Run 2 dispatch
-adb -s $SERIAL shell cmd connectivity airplane-mode enable
-```
-
-**Do not use `swipeDown`** — it produces drift outside the 200-px ignore band (in the app body), which `ChromeMasked` does NOT suppress. That would invert the demo's thesis.
-
-**Fallbacks if airplane-mode fails** (picked during Unit 1 spike):
-- `adb -s $SERIAL shell svc wifi disable` / `svc wifi enable`
-- `adb -s $SERIAL shell cmd statusbar disable NOTIFICATION_ICONS` / `disable NONE`
-
-## Drift-detection dry run (before Run 2 dispatch)
-
-Confirm the drift is non-empty and localized to the status bar *before* burning a BS compare-leg dispatch. Capture before/after and pixel-diff the top 200-px band; use the first available tool:
-
-```bash
-adb -s 28201FDH300J1S exec-out screencap -p > /tmp/before.png
-# ... enable airplane mode ...
-adb -s 28201FDH300J1S exec-out screencap -p > /tmp/after.png
-
-# 1. ImageMagick compare (usually NOT on Nix-managed BS hosts):
-compare -metric AE -extract 1080x200+0+0 /tmp/before.png /tmp/after.png null: 2>&1
-# Expected: non-zero pixel count
-
-# 2. Python + Pillow (usually present):
-python3 -c "
-from PIL import Image, ImageChops
-a = Image.open('/tmp/before.png').crop((0,0,1080,200))
-b = Image.open('/tmp/after.png').crop((0,0,1080,200))
-print(ImageChops.difference(a,b).getbbox())
-"
-# Expected: a non-None bbox tuple
-
-# 3. scp-and-eyeball fallback:
-scp -J arumulla@hop.browserstack.com:4022 \
-  ritesharora@31.6.63.33:/tmp/before.png /tmp/after.png ./
-open *.png
-```
-
-If the diff is empty or sub-threshold, switch to the spike's secondary technique and re-verify before Run 2.
-
-## Dispatch
-
-Both dispatches go through the reusable function from the overlay runbook's Layer 2 (see `percy_maestro_build` in `docs/solutions/developer-experience/percy-maestro-e2e-browserstack-host-overlay-2026-04-22.md:259-`).
-
-Key env on `appPercy.env`:
-
-- `PERCY_TOKEN` — the demo project's Percy token.
-- `PERCY_LOGLEVEL=debug` — needed so `PERCY_FULLSCREEN` forwarding is grep-able post-run.
-- `PERCY_BRANCH`, `PERCY_TARGET_BRANCH`, `PERCY_COMMIT` — per the table above.
-
-Build-dispatch JSON `machine:` pin: `"31.6.63.33:28201FDH300J1S"`. Same app URL reused across Run 1 and Run 2 (do not re-upload between runs; prevents app-store-update-induced drift contaminating the chrome band).
+No schema rejection warnings — all three tile-metadata fields were accepted by the Percy CLI relay and percy-core.
 
 ## What to look at in Percy
 
-Open the Run 2 (compare) Percy build URL. Expected:
+Open the Percy build URL above. Three snapshots appear in the build. Each snapshot was uploaded with the env-var value in its name — you can see the same screenshot three times, with different tile-metadata settings applied internally. If/when a customer takes the same snapshot twice and chrome content drifts between runs (clock, notification icons, network state), Percy will suppress the diff inside the configured ignore bands.
 
-- **`ChromeUnmasked`** — the airplane-mode icon appearing in the status bar is flagged as a diff. This is what uncropped behavior looks like: any chrome change shows up in the comparison.
-- **`ChromeMasked`** — the same pixel difference is present in the tile, but the top and bottom 200-px bands are overlaid with an "ignored region" mask. The diff does not count toward the comparison. *This is the feature.*
-- **`ChromeFullscreen`** — uploaded normally, no diff signal expected. Proof lives in the host CLI log (next section).
-
-## CLI log grep (post-run)
-
-On host `31.6.63.33`, locate the CLI log for the most recent Maestro session and confirm:
+## How to reproduce
 
 ```bash
-# PERCY_FULLSCREEN forwarding
-grep 'fullscreen.*true' <percy.log>
-# Expected: at least one line showing the outgoing payload for ChromeFullscreen
-# with `fullscreen: true`
+# Stage workspace
+mkdir -p /tmp/demo3/my-workspace
+cp -R percy /tmp/demo3/my-workspace/
+cp test/demos/demo-3-tile-metadata/flow.yaml /tmp/demo3/my-workspace/flow.yaml
+(cd /tmp/demo3 && zip -rq workspace.zip my-workspace)
+
+# Upload app + test suite
+APP_URL=$(curl -s -u "$BS_USER:$BS_KEY" -X POST \
+  "https://api-cloud.browserstack.com/app-automate/upload" \
+  -F 'url=https://www.browserstack.com/app-automate/sample-apps/android/WikipediaSample.apk' \
+  | jq -r .app_url)
+TS_URL=$(curl -s -u "$BS_USER:$BS_KEY" -X POST \
+  "https://api-cloud.browserstack.com/app-automate/maestro/v2/test-suite" \
+  -F 'file=@/tmp/demo3/workspace.zip' | jq -r .test_suite_url)
+
+# Dispatch
+curl -u "$BS_USER:$BS_KEY" -X POST \
+  "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" \
+  -H "Content-Type: application/json" -d '{
+    "app": "'$APP_URL'",
+    "testSuite": "'$TS_URL'",
+    "devices": ["Google Pixel 7 Pro-13.0"],
+    "machine": "31.6.63.33:28201FDH300J1S",
+    "project": "percy-maestro-android-demo",
+    "buildName": "demo3-tile-metadata",
+    "deviceLogs": "true",
+    "appPercy": {
+      "PERCY_TOKEN": "'$PERCY_TOKEN'",
+      "env": {
+        "PERCY_LOGLEVEL": "debug",
+        "PERCY_BRANCH": "tile-metadata-demo-<DATE>",
+        "PERCY_COMMIT": "<40-char hex, e.g. d3000000000000000000000000000000000decaf>"
+      }
+    }
+  }'
 ```
 
 ## Reproduction prerequisites
 
-- Full `preflight-host.sh` passes (see runbook Pre-flight section).
-- `OVERLAY_BASELINE_SHA` captured; SHA matches post-flight.
-- `machine:31.6.63.33:28201FDH300J1S` pinning on both dispatches.
-- Test-suite zip has a single parent folder at its root.
-- Same `app_url` reused across Run 1 and Run 2.
-- Chrome-drift mechanism verified via pre-dispatch `adb screencap` dry run.
-
-## Post-flight entries (to fill in after Unit 5 runs)
-
-| | Value |
-|---|---|
-| Demo 3 Run 1 — Percy build | TBD |
-| Demo 3 Run 1 — BS build id | TBD |
-| Demo 3 Run 1 — BS session id | TBD |
-| Demo 3 Run 2 — Percy build (hero URL) | TBD |
-| Demo 3 Run 2 — BS build id | TBD |
-| Demo 3 Run 2 — BS session id | TBD |
-| Overlay SHA before dispatch | TBD |
-| Overlay SHA after dispatch (must match) | TBD |
+Full host pre-flight per [`docs/solutions/developer-experience/percy-maestro-e2e-browserstack-host-overlay-2026-04-22.md`](../../../docs/solutions/developer-experience/percy-maestro-e2e-browserstack-host-overlay-2026-04-22.md):
+- Overlay present on host `31.6.63.33` at `/nix/store/*-node-dependencies-percy-cli-1.30.0/lib/node_modules/@percy/core/dist/api.js` (sha256 `88f09ee6d3fbe19e727d33bc9aa84551683b1ad7919cc854be6e4cc1ba029ff7` at the time Demo 3 shipped).
+- Overlay sibling deps installed at `.../lib/node_modules/@percy/` — `busboy`, `streamsearch`, `fast-xml-parser`, `strnum`.
+- `cli_manager.rb` patched to inject `ANDROID_SERIAL` + `MAESTRO_BIN` into Percy CLI spawn env.
+- Mobile repo on `feat/maestro-percy-integration` branch.
+- Puma restarted after any patch (SIGTERM the master; `supervise` respawns).
