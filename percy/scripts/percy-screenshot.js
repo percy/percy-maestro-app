@@ -63,10 +63,12 @@ try {
             var validRegions = [];
             for (var ri = 0; ri < parsedRegions.length; ri++) {
               var region = parsedRegions[ri];
-              // Element-based region: must have element key with at least one selector
+              // Element-based region: forward to the CLI relay, which resolves
+              // the selector to a pixel bbox per-platform (ADB on Android,
+              // WebDriverAgent source-dump on iOS). Shape validation + zero-match
+              // warn-skip are the relay's responsibility — one source of truth.
               if (region.element) {
-                // Element-based regions require ADB resolution in the CLI relay (not yet implemented)
-                console.log("[percy] Warning: element-based regions are not yet supported, skipping. Use coordinate-based regions instead.");
+                validRegions.push(region);
               // Coordinate-based region: must have numeric top/bottom/left/right
               } else if (region.top != null && region.bottom != null && region.left != null && region.right != null) {
                 var t = parseInt(region.top);
@@ -122,7 +124,7 @@ try {
       }
 
       payload.platform = maestro.platform;
-      payload.clientInfo = "percy-maestro/0.4.0";
+      payload.clientInfo = "percy-maestro/1.0.0";
       payload.environmentInfo = "percy-maestro";
 
       // POST to the relay endpoint — Percy CLI reads the file from disk
