@@ -236,16 +236,39 @@ The Percy Maestro Android SDK works in two stages:
 
 ## Features not supported
 
-These features from other Percy SDKs are intentionally not applicable here:
+This section is split into two parts so you can tell *can't build on this runtime* apart from *haven't built yet*.
 
-| Feature | Reason |
+### Architectural limits (not feasible on this runtime)
+
+These features are blocked by the Maestro / BrowserStack / Android runtime itself. They are not on our roadmap because the underlying environment does not support the mechanism.
+
+| Feature | Reason | Workaround |
+|---------|--------|-----------|
+| BrowserStack session ↔ Percy build correlation via `browserstack_executor: percyScreenshot begin/end` | Maestro's GraalJS script environment has no Appium driver or `executeScript` surface through which the `browserstack_executor:` string is interpreted. Equivalent correlation would require a BrowserStack Maestro-runner infra change, not an SDK change. | Match `--build-name` between `percy app:exec` and the BrowserStack Maestro build request, or read `BROWSERSTACK_BUILD_ID` from the Maestro flow env and include it in your snapshot names. |
+| `fullPage` / `scrollableXpath` / `scrollableId` / `screenLengths` | Maestro controls scrolling via YAML `scroll` commands. | Capture multiple screenshots with `scroll` steps between them. |
+| `freezeAnimations` / `percyCSS` / `enableJavascript` | DOM/web-specific. Native mobile screenshots are bitmap captures — no DOM to manipulate. | Use Maestro's own animation controls (e.g., `waitForAnimationToEnd`) before `takeScreenshot`. |
+| XPath region selectors | Android view hierarchy does not expose XPath. | Use `resource-id` / `text` / `content-desc` / `class` instead. |
+| Percy on Automate (POA) | POA requires Appium-style driver capabilities and a live session; Maestro has no equivalent execution model. | Use standard Percy snapshot uploads (this SDK) for Maestro-on-BrowserStack. |
+| iOS | This package is Android-only. | Use [percy-maestro](https://github.com/percy/percy-maestro) for iOS Maestro flows. |
+| Local `maestro test` runtime | The CLI relay expects BrowserStack's session-directory file layout. | Run on BrowserStack Maestro. See [Runtime support](#runtime-support). |
+
+### Deferred / on roadmap
+
+These are implemented partially or not yet and are expected to land in a future round. Use the interim workaround if you are blocked today.
+
+**Planned for the next round:**
+
+| Feature | Status | Interim workaround |
+|---------|--------|-------------------|
+| `PERCY_IGNORE_ERRORS` / `PERCY_ENABLED` kill-switches | Appium-style config; next-round plan tracked at [`docs/plans/2026-04-23-001-feat-kill-switches-plan.md`](docs/plans/2026-04-23-001-feat-kill-switches-plan.md). Target: next sprint. | Unset `PERCY_TOKEN` in your Maestro flow env to disable Percy without a code change, or remove the `percy-init` / `percy-screenshot` `runFlow` steps from your flow. |
+
+**Under evaluation (no committed timeline):**
+
+| Feature | Status |
 |---------|--------|
-| `fullPage` / `scrollableXpath` / `scrollableId` / `screenLengths` | Maestro controls scrolling via YAML `scroll` commands. Capture multiple screenshots with `scroll` steps between them. |
-| `freezeAnimations` / `percyCSS` / `enableJavascript` | DOM/web-specific. Native mobile screenshots are bitmap captures — no DOM to manipulate. |
-| XPath region selectors | Android view hierarchy does not expose XPath. Use `resource-id` / `text` / `content-desc` / `class` instead. |
-| Percy on Automate (POA) | POA requires Appium-style driver capabilities and a live session; Maestro has no equivalent execution model. |
-| iOS | This package is Android-only. Use [percy-maestro](https://github.com/percy/percy-maestro) for iOS. |
-| Local `maestro test` runtime | The CLI relay expects BrowserStack's session-directory file layout. See [Runtime support](#runtime-support). |
+| `/percy/events` failure telemetry | Not yet forwarded by the SDK. |
+| Sync mode (`PERCY_SYNC`) | Implemented in the SDK (accepts the env var and logs the sync result when the relay returns one) but unproven end-to-end on BrowserStack; a prior round saw a 403 on the sync-result query that is believed unrelated backend behavior. |
+| `PERCY_TH_TEST_CASE_EXECUTION_ID` dashboard rendering | The SDK forwards this field to the Percy backend (verified end-to-end). However, no Percy dashboard surface currently renders it — this is a `percy-api` serializer gap, tracked separately from this SDK. TestHub integrators can read the value from the Percy CLI debug log. |
 
 ## Links
 

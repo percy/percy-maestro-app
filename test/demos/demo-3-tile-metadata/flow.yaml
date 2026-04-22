@@ -1,0 +1,62 @@
+appId: org.wikipedia.alpha
+---
+# Demo 3 — Tile Metadata
+#
+# Runs three screenshot sub-flows:
+#   1. ChromeUnmasked   — heights=0; status-bar drift flags as diff
+#   2. ChromeMasked     — heights=200/200; same drift suppressed by ignore band
+#   3. ChromeFullscreen — PERCY_FULLSCREEN=true; payload-forwarding check only
+#
+# Between Run 1 (baseline) and Run 2 (compare), the operator toggles an
+# adb-level status-bar-only drift mechanism on the pinned host (airplane mode
+# by default; see notes.md for the active candidate from Unit 1's spike).
+#
+# Relative paths (`../../percy/...`) resolve from this file's directory
+# under `test/demos/demo-3-tile-metadata/`.
+
+- runFlow: ../../../percy/flows/percy-init.yaml
+
+- launchApp
+
+# REQUIRED: navigate to a fully-static screen so non-chrome pixels are identical
+# between Run 1 and Run 2. Wikipedia Alpha's home feed rotates (article-of-the-day,
+# prefetch) and would contaminate ChromeMasked with body-region diffs that the
+# 200-px ignore band cannot suppress.
+#
+# Validate the exact tap sequence against the current APK in a dry run before
+# the first real dispatch. If Wikipedia Alpha's bottom-nav shape has changed,
+# adjust accordingly (this sequence is for the 2026-04-22 build).
+- tapOn: "More"
+- tapOn: "Settings"
+
+- runFlow:
+    file: ../../../percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: ChromeUnmasked
+      PERCY_STATUS_BAR_HEIGHT: "0"
+      PERCY_NAV_BAR_HEIGHT: "0"
+      PERCY_DEVICE_NAME: "Google Pixel 7 Pro"
+      PERCY_OS_VERSION: "13"
+      PERCY_SCREEN_WIDTH: "1080"
+      PERCY_SCREEN_HEIGHT: "2400"
+
+- runFlow:
+    file: ../../../percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: ChromeMasked
+      PERCY_STATUS_BAR_HEIGHT: "200"
+      PERCY_NAV_BAR_HEIGHT: "200"
+      PERCY_DEVICE_NAME: "Google Pixel 7 Pro"
+      PERCY_OS_VERSION: "13"
+      PERCY_SCREEN_WIDTH: "1080"
+      PERCY_SCREEN_HEIGHT: "2400"
+
+- runFlow:
+    file: ../../../percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: ChromeFullscreen
+      PERCY_FULLSCREEN: "true"
+      PERCY_DEVICE_NAME: "Google Pixel 7 Pro"
+      PERCY_OS_VERSION: "13"
+      PERCY_SCREEN_WIDTH: "1080"
+      PERCY_SCREEN_HEIGHT: "2400"
