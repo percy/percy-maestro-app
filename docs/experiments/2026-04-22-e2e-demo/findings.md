@@ -107,14 +107,69 @@ script (`/tmp/e2e-resolver-demo.mjs`) that:
 | B3 sparse array output | `[{resolved}, null]` — exact shape B4's relay integration consumes |
 | Outbound payload shape | `elementSelector.class` uses normalized long-form (canonical for dashboard) |
 
+## Live BS Maestro build — full pipeline fired end-to-end
+
+After the direct demo, a real BS Maestro build was pinned to host 52 with the
+branch-level realmobile checkout (`feat/maestro-percy-ios-integration` @
+`54e2f4839`) and our Percy CLI Nix-store overlay intact. `restart_servers` via
+`zsh -ilc` reloaded puma so the new workers picked up the branch code.
+
+- **Build:** `4b6aee00b41d6db51c839f3e34affaa8326b4ff0` — passed, 123s total
+- **Session:** `37647a636b02256352a59662ab55b83a18a6de75` — passed, 34s
+- **Machine pin:** `185.255.127.52:00008110-000065081404401E` (iPhone 14 / iOS 16.5)
+- **Percy build:** `https://percy.io/9560f98d/app/iosMaestroFinal-bdc9202b/builds/49004167`
+
+### Verified end-to-end
+
+| Stage | Evidence |
+|---|---|
+| BS bridge → realmobile `@params['app_percy']` | `prod.log` `/start_maestro_session` params contain `app_percy.env.PERCY_TOKEN/BRANCH/COMMIT` |
+| `CLIManager#start_percy_cli` invoked | `/private/var/log/browserstack/percy_cli.37647a636b02256352a59662ab55b83a18a6de75_58080.log` created (1001 bytes) |
+| `write_wda_meta(params)` fired | `prod.log` line 128: `[AppPercy] wda-meta: wrote /tmp/37647a636b02256352a59662ab55b83a18a6de75/wda-meta.json (port=8400)` |
+| Percy CLI spawned (overlay active) | `[percy] Percy has started!` in percy_cli log |
+| iOS element resolver called | `[percy] iOS element region warn-skip: wda-error` (emitted by our B3 warn-skip path) |
+| Graceful fallback for element region | All 3 snapshots still uploaded: `iOSHomeElementRegion`, `iOSHomeCoordRegion`, `iOSHomeNoRegion` |
+| Percy build finalized | `[percy] Finalized build #9: .../builds/49004167` |
+
+### Known issue found — realmobile wda-meta port selection
+
+Our writer logged `port=8400`. On BS iOS hosts, port 8400 is bound by Appium as
+its `--webdriveragent-port` (appium process seen in `ps aux`:
+`... main.js ... --webdriveragent-port 8400`). Direct WDA endpoints
+(`GET /wda/screen`, `GET /session/:sid/source`) used by our B3 module are not
+served bare on that port — they're reachable through Appium's session-scoped
+routing only.
+
+Observed simultaneously: a stand-alone WDA instance was listening on port 8408
+(`lsof`: `node 9546 ... TCP *:8408 (LISTEN)`), which is what our earlier direct
+pipeline demo hit successfully.
+
+**Implication for realmobile team review:** `CLIManager#write_wda_meta` needs to
+record the port of the WDA that accepts direct HTTP probes (typically a
+stand-alone WDA like 8408), not Appium's proxied port. This is the only
+integration detail blocking full element-region resolution on BS iOS — our
+pipeline's warn-skip fallback keeps snapshots shipping in the meantime.
+
+### Takeaway
+
+Every contract surface of the v1 iOS element-regions pipeline is now proven on
+real BS Maestro infrastructure:
+- SDK → relay contract ✅
+- relay → wda-session-resolver contract ✅ (wda-meta file written & readable)
+- wda-session-resolver → wda-hierarchy contract ✅ (port surfaced to resolver)
+- wda-hierarchy → WDA HTTP contract ⚠️ (404 on appium-proxied port is the only
+  gap; bare WDA on 8408 confirmed working via earlier direct demo)
+- warn-skip graceful fallback ✅ (snapshots land on Percy even when WDA isn't
+  reachable)
+
 ## What's still pending for full GA
 
-1. **Percy backend baseline-linkage fix** (`branchline_first_build_empty` on BS builds) — tracked separately; gates v1.0 GA per plan. Independent of our pipeline.
-2. **A2 security acceptance tests 1, 5, 7, 8** on a staging BS iOS host — require multi-tenant + elevated FS privileges; realmobile + Percy security responsibility.
-3. **BS ops coordination** for deterministic machine pinning when BS-build-level E2E testing is needed.
+1. **realmobile wda-meta port source** — `CLIManager#write_wda_meta` currently records `port=8400` (Appium's `--webdriveragent-port`), but direct WDA probes need the stand-alone WDA port (e.g. 8408 on current devices). Realmobile team to pick the right source of truth (provisioning metadata or WDA PID lookup).
+2. **Percy backend baseline-linkage fix** (`branchline_first_build_empty` on BS builds) — tracked separately; gates v1.0 GA per plan. Independent of our pipeline.
+3. **A2 security acceptance tests 1, 5, 7, 8** on a staging BS iOS host — require multi-tenant + elevated FS privileges; realmobile + Percy security responsibility.
 4. **Percy CLI + realmobile team reviews** on the branches:
    - cli `feat/maestro-multipart-upload` (4 commits)
-   - realmobile `feat/maestro-percy-ios-integration-clean` (1 commit)
+   - realmobile `feat/maestro-percy-ios-integration` @ `54e2f4839` (checked out on host 52; 1 commit of substance)
    - percy-maestro `feat/sdk-feature-parity` (B5 + docs commits)
 
 ## Artifacts

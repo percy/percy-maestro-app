@@ -1,6 +1,6 @@
 ---
 title: realmobile ↔ Percy CLI contract — `/tmp/<sid>/wda-meta.json`
-version: 1.0.0 (draft for realmobile team review)
+version: 1.1.0 (draft for realmobile team review)
 date: 2026-04-22
 owner: percy-maestro maintainer + realmobile EM (named at sign-off)
 status: draft
@@ -46,9 +46,10 @@ Cited precedent: **Apple Secure Coding Guide — Race Conditions and Secure File
 
 ```json
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "sessionId": "ee3e38959d25183296db12fd1f35a3f6678bfe55",
   "wdaPort": 8400,
+  "wdaSessionId": "079FB256-3ADD-43A3-A5FB-F9B85269F84C",
   "processOwner": 502,
   "flowStartTimestamp": 1745294494000
 }
@@ -56,13 +57,24 @@ Cited precedent: **Apple Secure Coding Guide — Race Conditions and Secure File
 
 | Field | Type | Required | Constraints |
 |---|---|---|---|
-| `schema_version` | string (semver) | yes | Percy CLI v1.0 accepts `"1.0.*"`. Reject any major != 1 with `'schema-version-unsupported'`. |
+| `schema_version` | string (semver) | yes | Percy CLI accepts any `"1.*.*"`. Reject any major != 1 with `'schema-version-unsupported'`. |
 | `sessionId` | string | yes | Must match the sessionId Percy CLI received in the request payload. Alphanumeric + hyphens, 16–64 chars. |
 | `wdaPort` | integer | yes | 8400–8410 (BS's allocated WDA port range on iOS hosts). Any value outside this range → `'out-of-range-port'`. |
+| `wdaSessionId` | string | **v1.1.0+**, optional | WDA's internal session UUID (distinct from `sessionId`, which is BS's `automate_session_id`). Percy CLI uses this for `/session/:wdaSid/source` calls — WDA rejects the BS session id on that route. Hex + hyphens, 16–64 chars. When omitted or malformed, Percy CLI falls back to `sessionId` and silently warn-skips if `/source` 404s. |
 | `processOwner` | integer (uid) | yes | The uid of the Maestro-spawning process. Percy CLI validates this equals its own `getuid()` via `fstat`. |
 | `flowStartTimestamp` | integer (ms epoch) | yes | When realmobile initialized the Maestro session. Percy CLI uses this for freshness validation (see §5). |
 
-No additional fields in v1.0.0. Future additive fields (e.g., `wdaAuthToken`, `deviceUdid`) require minor `schema_version` bump (e.g., `1.1.0`); Percy CLI v1.0 ignores unknown fields but continues to validate the required ones.
+### How realmobile obtains `wdaSessionId`
+
+Every WDA response (including `GET /status`) embeds the active session UUID at the top level:
+```json
+{ "value": { "ready": true, ... }, "sessionId": "079FB256-3ADD-43A3-A5FB-F9B85269F84C" }
+```
+realmobile probes `GET http://127.0.0.1:<wda_port>/status` at `write_wda_meta` time (short open/read timeouts: 1s/2s), parses the response, and validates the `sessionId` against `/^[A-Fa-f0-9-]{16,64}$/` before writing. The probe is best-effort — any failure (WDA not yet ready, timeout, parse error) causes the field to be omitted; Percy CLI treats omission as a v1.0.0-compatible write.
+
+This relies on the BS host invariant that at most one WDA session is active per device at the moment Percy CLI is spawned.
+
+Future additive fields require minor `schema_version` bump; Percy CLI ignores unknown fields but continues to validate the required ones.
 
 ### 3. File mode — strict
 
@@ -219,3 +231,4 @@ A weekly contract-conformance canary run of the 8 acceptance tests against a sta
 | Version | Date | Change | By |
 |---|---|---|---|
 | 1.0.0-draft | 2026-04-22 | Initial draft for realmobile team review | percy-maestro maintainer |
+| 1.1.0-draft | 2026-04-23 | Add `wdaSessionId` (optional) — carries WDA's internal session UUID so Percy CLI can call `/session/:sid/source`. Discovered during live E2E on host 52 that WDA rejects BS's `automate_session_id` on session-scoped routes. Writer probes `GET /status` to obtain it; field omitted on probe failure (v1.0.0-compatible). | percy-maestro maintainer |
