@@ -162,6 +162,56 @@ If, when BS iOS Maestro is unblocked and the probe is rerun:
 
 Only if A0+A1+A3 all pass should the WDA-direct delete proceed.
 
+## Followup 2026-04-29 — iOS+appPercy demo attempts revealed two new blockers
+
+Attempted to run a fresh iOS Maestro `appPercy` demo build to validate the WDA-direct path end-to-end while Phase 0.5 (the maestro-hierarchy probe) waited on BS infra. Triggered 4 BS Maestro iOS builds with `appPercy` enabled. **All 4 failed** in two distinct ways:
+
+### Blocker #1 — `cli_manager.rb` invokes bare `percy` (PATCHED on host 52, ephemeral)
+
+Realmobile's baseline `start_percy_cli` (at `/usr/local/.browserstack/realmobile/lib/app_percy/cli_manager.rb` line 22) runs `percy app exec:start --port <port> > <log> 2>&1` with bare `percy` — depends on PATH. **Puma's PATH on BS iOS hosts is `/usr/bin:/bin:/usr/sbin:/sbin`; no symlink to the Nix-store percy bin exists.** The result: every `appPercy` iOS session has empty 0-byte `percy_cli.*.log` files because `sh: percy: command not found`.
+
+The prior 2026-04-22 demo's overlay (the 202-line `cli_manager.rb` from commit `84d930f4a`) likely had the absolute path — that overlay is gone now (canary auto-deploy on 2026-04-28 advanced realmobile past the overlay branch; backup file `.bak-a2` is also gone).
+
+Patched on host 52 in-place via `sed`-replace to use the absolute Nix-store path. Backup at `cli_manager.rb.bak-pre-demo-2026-04-29`. **This patch will be reverted by the next canary auto-deploy.** A durable fix needs a realmobile PR.
+
+### Blocker #2 — Maestro test exits with "Unknown error" in 5.197s, BEFORE Percy CLI is invoked (UNDIAGNOSED)
+
+After the cli_manager.rb patch was applied + verified manually working, the next build (ID `7a55b7e8acba4dc1b80f4e302b8e816e6b21854a`, session `40e0e588e318...`) progressed further but failed at a different layer:
+
+- Maestro **dry-run** at 10:55:07 UTC succeeded (Maestro 2.1.0, Java 17, Xcode 14.0, all healthy)
+- Maestro **real-run** at 10:55:25 UTC exited code 1 in 5.197s
+- realmobile prod.log: `spawn_xctest.rb: Test 'e2e-ios-regions' failed with message: Unknown error` and `Failure does not match error patterns, marking as failed: Unknown error`
+- The actual maestro stderr is truncated mid-line in prod.log: `"Listed real iOS devices: [00008110-|"` (1000-char log truncation)
+- `start_percy_cli` is **never invoked** for this session (no AppPercy log entries) — confirming the maestro-test failure is upstream of all Percy work
+- Full maestro.log is in S3 (URL + write-only AWS keys are in prod.log) — `aws s3 cp` returns `403 HeadObject`. Cannot read the full stderr from this session.
+
+### Yesterday's contrast — non-Percy iOS Maestro builds passed
+
+- `c0456ab54fd4...` — iPhone 14-18.0, **passed** (124s), no `appPercy`
+- `3175b4fdfd27...` — iPhone 15-17.0, **passed** (455s), no `appPercy`
+
+Failure is correlated with `appPercy` enablement, but happens in `maestro test`, not in Percy. Suspected hypothesis: something in how `appPercy.env.*` propagates to the maestro test command (possibly `PERCY_PARALLEL_NONCE`/`PERCY_PARALLEL_TOTAL` env vars BS auto-injects, or a non-string env value) confuses Maestro 2.1.0's flow runner.
+
+### What's needed to unblock iOS+appPercy demos
+
+1. **Read access to BS S3 logs** (or someone with read creds pulls the maestro.log for `40e0e588e318...`) → reveals the actual upstream error.
+2. **OR** patch `maestro_session.rb` on a host to skip log cleanup, then re-run a build, read `/tmp/<sid>/...maestro.log` directly.
+3. **realmobile PR** to bake the absolute percy path (or extend puma's PATH) so the cli_manager.rb fix is durable across canary auto-deploys.
+
+### Operational state on host 52 as of 2026-04-29 16:00 IST
+
+| Component | State | Notes |
+|---|---|---|
+| realmobile branch | `b56902ec2 Canary Release 2026-04-28` (HEAD detached) | Auto-advanced past the prior overlay branch on 2026-04-28 nightly |
+| `cli_manager.rb` | 86 lines baseline + percy-absolute-path patch | Patch backed up at `.bak-pre-demo-2026-04-29`; ephemeral |
+| Percy CLI overlay (`/nix/store/.../core/dist/`) | Apr 22-23 timestamps; intact | `wda-hierarchy.js`, `wda-session-resolver.js`, `png-dimensions.js` all present |
+| `dist.bak-v1` | Vanilla CLI backup | For overlay revert if needed |
+| `cli_manager.rb.bak-a2` | GONE | Prior session's overlay backup was wiped at some point |
+| `feat/maestro-percy-ios-integration` branch ref | `54e2f48399d4` | Local ref still exists; only 87 lines (NOT the 202-line overlay claimed in 2026-04-22 demo doc) |
+| Commit `84d930f4a` | NOT FOUND on origin or local | The 202-line overlay was never pushed; lost permanently |
+
+(see memories: `project_realmobile_canary_overlay_revert.md`, `project_realmobile_cli_manager_percy_path_bug.md`, `project_bs_ios_maestro_appPercy_demo_blockers_2026_04_29.md`)
+
 ## Cross-reference
 
 - Brainstorm: `docs/brainstorms/2026-04-27-ios-element-regions-maestro-hierarchy-requirements.md`
