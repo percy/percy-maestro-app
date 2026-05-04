@@ -1,0 +1,54 @@
+appId: org.wikipedia.alpha
+---
+# Demo 3 — Tile Metadata (single-build feature-forwarding demo)
+#
+# Three snapshots, each exercising one of the v0.3.0 tile-metadata fields:
+#   1. PERCY_STATUS_BAR_HEIGHT  (realistic Pixel 7 Pro status-bar height)
+#   2. PERCY_NAV_BAR_HEIGHT     (realistic nav-bar band)
+#   3. PERCY_FULLSCREEN         (forwarding flag; no dashboard signal)
+#
+# Percy then treats the corresponding top/bottom pixel bands as ignored
+# regions in subsequent diff computations. The demo proves the SDK →
+# CLI relay → Percy backend path accepts these fields end-to-end.
+#
+# For BS dispatch the workspace zip layout is:
+#   my-workspace/
+#     flow.yaml            ← this file (paths below resolve to percy/)
+#     percy/
+#       flows/...
+#       scripts/...
+
+- runFlow: percy/flows/percy-init.yaml
+- launchApp
+
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: TileMeta_StatusBarHeight_90
+      PERCY_STATUS_BAR_HEIGHT: "90"
+      PERCY_NAV_BAR_HEIGHT: "0"
+      PERCY_DEVICE_NAME: "Google Pixel 7 Pro"
+      PERCY_OS_VERSION: "13"
+      PERCY_SCREEN_WIDTH: "1080"
+      PERCY_SCREEN_HEIGHT: "2340"
+
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: TileMeta_NavBarHeight_120
+      PERCY_STATUS_BAR_HEIGHT: "0"
+      PERCY_NAV_BAR_HEIGHT: "120"
+      PERCY_DEVICE_NAME: "Google Pixel 7 Pro"
+      PERCY_OS_VERSION: "13"
+      PERCY_SCREEN_WIDTH: "1080"
+      PERCY_SCREEN_HEIGHT: "2340"
+
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: TileMeta_Fullscreen_True
+      PERCY_FULLSCREEN: "true"
+      PERCY_DEVICE_NAME: "Google Pixel 7 Pro"
+      PERCY_OS_VERSION: "13"
+      PERCY_SCREEN_WIDTH: "1080"
+      PERCY_SCREEN_HEIGHT: "2340"
