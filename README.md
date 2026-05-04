@@ -31,14 +31,6 @@ No package manager or build step is required. The SDK is a set of Maestro sub-fl
 
 ## Usage
 
-### Initialize Percy
-
-Add a `runFlow` step at the beginning of your Maestro flow to initialize Percy. This performs a healthcheck against the Percy CLI server and sets `percyEnabled` for downstream steps.
-
-```yaml
-- runFlow: percy/flows/percy-init.yaml
-```
-
 ### Take a screenshot
 
 Add a `runFlow` step wherever you want to capture a screenshot. Pass the `SCREENSHOT_NAME` environment variable to name the snapshot.
@@ -50,13 +42,13 @@ Add a `runFlow` step wherever you want to capture a screenshot. Pass the `SCREEN
       SCREENSHOT_NAME: Homepage
 ```
 
+The first screenshot in a flow runs a Percy CLI healthcheck automatically; subsequent screenshots reuse the cached result. No explicit init step is required.
+
 ### Full example
 
 ```yaml
 appId: com.example.myapp
 ---
-- runFlow: percy/flows/percy-init.yaml
-
 - launchApp
 
 - runFlow:
@@ -77,6 +69,16 @@ Run the flow with Percy:
 ```bash
 npx percy app:exec -- maestro test your-flow.yaml
 ```
+
+### Optional: eager initialization
+
+If you want the healthcheck to run at flow start (so a Percy outage surfaces in the logs before any test steps), add this once at the top of your flow:
+
+```yaml
+- runFlow: percy/flows/percy-init.yaml
+```
+
+This is purely opt-in — `percy-screenshot.yaml` self-initializes on first call regardless.
 
 ## Configuration
 
@@ -326,7 +328,7 @@ See the [BrowserStack Maestro documentation](https://www.browserstack.com/docs/a
 
 The Percy Maestro SDK works in two stages:
 
-1. **Initialization** -- The `percy-init` sub-flow runs a healthcheck against the Percy CLI server to verify it is available. If the CLI is not running or not reachable, Percy is silently disabled for the rest of the flow. The CLI version and server address are stored for downstream use.
+1. **Initialization (lazy)** -- The first `percy-screenshot` call in a flow runs a healthcheck against the Percy CLI server to verify it is available, caching the result in `output.percyEnabled` so subsequent screenshots short-circuit. If the CLI is not running or not reachable, Percy is silently disabled for the rest of the flow. The optional `percy-init` sub-flow runs the same healthcheck eagerly at flow start — useful when you want CI logs to surface a Percy outage before any test steps.
 
 2. **Screenshot capture** -- Each `percy-screenshot` sub-flow call uses Maestro's built-in `takeScreenshot` command to save a PNG to disk, then runs a JS script that sends screenshot metadata (name, session ID, device tag, regions, tile options) as a JSON POST to the Percy CLI's `/percy/maestro-screenshot` relay endpoint. The Percy CLI finds the screenshot file on disk, base64-encodes it, resolves any element-based regions, and uploads the comparison.
 

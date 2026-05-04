@@ -3,8 +3,67 @@
 // Percy CLI finds the screenshot file on disk and handles all file I/O.
 // Requires: SCREENSHOT_NAME env var (from YAML sub-flow)
 //           PERCY_SESSION_ID env var (injected by BrowserStack maestro_runner.rb)
+//
+// Self-initializes Percy on first call: if `output.percyEnabled` is undefined,
+// runs the healthcheck inline and caches the result. This makes the explicit
+// `- runFlow: percy/flows/percy-init.yaml` step optional. Subsequent screenshots
+// in the same flow short-circuit on the cached `output.percyEnabled` value.
+
+function runPercyHealthcheckInline() {
+  function logDisabledBanner(detailLine) {
+    console.log("[percy] ===============================================================");
+    console.log("[percy]  DISABLED — this build will have zero Percy screenshot coverage");
+    console.log("[percy]  " + detailLine);
+    console.log("[percy]  See: https://www.browserstack.com/docs/percy/integrate/overview");
+    console.log("[percy] ===============================================================");
+  }
+
+  try {
+    if (maestro.platform !== "android" && maestro.platform !== "ios") {
+      console.log("[percy] Percy Maestro SDK supports Android and iOS only. Disabling Percy.");
+      output.percyEnabled = false;
+      return;
+    }
+
+    var hcServer = "http://percy.cli:5338";
+    if (typeof PERCY_SERVER !== "undefined" && PERCY_SERVER) {
+      hcServer = PERCY_SERVER;
+    }
+
+    var hcResponse = http.get(hcServer + "/percy/healthcheck");
+
+    if (hcResponse.ok) {
+      var coreVersion = hcResponse.headers["x-percy-core-version"];
+      if (coreVersion) {
+        console.log("[percy] Percy CLI healthcheck passed. Core version: " + coreVersion);
+      } else {
+        console.log("[percy] Percy CLI healthcheck passed.");
+      }
+      output.percyEnabled = true;
+      output.percyServer = hcServer;
+      output.percyCoreVersion = coreVersion || "";
+    } else {
+      var status = parseInt(hcResponse.status) || 0;
+      if (status >= 400 && status < 500) {
+        logDisabledBanner("Percy CLI reachable at " + hcServer + " but rejected the request (status " + status + ")");
+      } else if (status >= 500) {
+        logDisabledBanner("Percy CLI error (server-side, status " + status + " at " + hcServer + ")");
+      } else {
+        logDisabledBanner("Percy CLI healthcheck returned unexpected status " + status + " at " + hcServer);
+      }
+      output.percyEnabled = false;
+    }
+  } catch (hcError) {
+    logDisabledBanner("Percy CLI is not reachable at percy.cli:5338 (" + hcError + ")");
+    output.percyEnabled = false;
+  }
+}
 
 try {
+  if (typeof output.percyEnabled === "undefined") {
+    runPercyHealthcheckInline();
+  }
+
   if (!output.percyEnabled) {
     var skipName = (typeof SCREENSHOT_NAME !== "undefined" && SCREENSHOT_NAME) ? SCREENSHOT_NAME : "(unnamed)";
     console.log("[percy] SKIPPED snapshot \"" + skipName + "\" — Percy disabled (see [percy] DISABLED banner above)");
@@ -124,7 +183,7 @@ try {
       }
 
       payload.platform = maestro.platform;
-      payload.clientInfo = "percy-maestro/1.0.0";
+      payload.clientInfo = "percy-maestro/0.4.0";
       payload.environmentInfo = "percy-maestro";
 
       // POST to the relay endpoint — Percy CLI reads the file from disk
