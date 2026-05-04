@@ -1,6 +1,9 @@
 # percy-maestro
 
-[Percy](https://percy.io) visual testing for [Maestro](https://maestro.mobile.dev/) mobile testing flows.
+[Percy](https://percy.io) visual testing for [Maestro](https://maestro.mobile.dev/) mobile testing flows. Supports Android and iOS.
+
+> **Runtime:** supported on BrowserStack Maestro sessions (Android + iOS).
+> See [Runtime support](#runtime-support) for details.
 
 ## Prerequisites
 
@@ -162,12 +165,6 @@ Regions let you control which parts of a screenshot Percy compares. Each region 
 
 "Consider region" behavior (focusing comparison on a specific area) is achieved by using `standard` or `intelliignore` on a bounded region.
 
-### Element-based regions (deferred)
-
-Element-based region resolution is **deferred for both Android and iOS** — the SDK accepts the shape in `PERCY_REGIONS` but currently logs a warning and skips them. Future work is tracked for Android (ADB-based resolver) and iOS (WebDriverAgent-based resolver); both need per-platform selector dialects and scale-factor handling, so they are planned as a later release.
-
-For now, use coordinate-based regions (below) on both platforms.
-
 ### Coordinate-based regions
 
 Specify pixel coordinates directly. Coordinates are relative to the screenshot (0,0 is top-left).
@@ -180,6 +177,49 @@ Specify pixel coordinates directly. Coordinates are relative to the screenshot (
       PERCY_REGIONS: '[{"top":0,"bottom":50,"left":0,"right":1080,"algorithm":"ignore"}]'
 ```
 
+### Element-based regions
+
+Identify regions by view-hierarchy attributes. Selectors are forwarded to the Percy CLI relay, which resolves them to pixel boxes per platform — Android via ADB view-hierarchy dump, iOS via WebDriverAgent source dump.
+
+| Platform | Supported selector keys (V1) |
+|----------|------------------------------|
+| Android  | `resource-id`, `text`, `content-desc`, `class` |
+| iOS      | `id` (accessibility identifier), `class` |
+
+iOS `text` and `xpath` selectors are deferred to V1.1 — `text` needs predicate-string escaping and `xpath` needs a DoS-complexity heuristic against deep UI trees.
+
+```yaml
+# Android
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: HomeScreen
+      PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/clock"},"algorithm":"ignore"}]'
+```
+
+```yaml
+# iOS
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: HomeScreen
+      PERCY_REGIONS: '[{"element":{"id":"clock-label"},"algorithm":"ignore"}]'
+```
+
+> **Status:** element-based regions require a Percy CLI that ships the
+> per-platform resolver (ADB resolver for Android, WDA source-dump resolver
+> for iOS). Until a resolver-supporting CLI is deployed to your BrowserStack
+> Maestro runner, element regions log a warning and are skipped. Coordinate
+> regions continue to work during the transition.
+
+### Multi-match behavior
+
+When a selector matches multiple views, the **first match in pre-order traversal** wins (same as `percy-appium-python`). Write more specific selectors to disambiguate when needed.
+
+### Release-build caveat (Android)
+
+Android release builds with `shrinkResources` + R8 resource optimization (AGP 8.12+) may rename the values surfaced as `resource-id`. For selectors that must survive release builds, prefer `content-desc` (accessibility-stable — R8 does not rename) or keep IDs via `keep.xml` / `tools:keep`. iOS selectors are unaffected.
+
 ### Advanced: per-region configuration
 
 Each region can include fine-grained diff settings:
@@ -189,6 +229,8 @@ PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/header"},"algorithm":"sta
 ```
 
 Configuration options: `diffSensitivity` (0-4), `imageIgnoreThreshold` (0-1), `carouselsEnabled`, `bannersEnabled`, `adsEnabled`.
+
+Each region may also include `padding` and `assertion` objects, which are forwarded to the Percy comparison pipeline verbatim.
 
 ### Multiple regions
 
@@ -214,8 +256,14 @@ PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/clock"},"algorithm":"igno
 ### Graceful degradation
 
 - Invalid JSON in `PERCY_REGIONS` → warning logged, screenshot uploads without regions
-- Individual malformed regions → skipped with per-region warning, valid regions still sent
-- Invalid bar heights (non-numeric) → silently omitted, defaults apply
+- Individual malformed regions → skipped with a per-region warning, valid regions still sent
+- Invalid bar heights (non-numeric) → silently omitted; CLI defaults (0) apply
+- Element region with no matching view → per-element warning at the CLI; valid regions still upload
+- Element resolver unavailable (ADB unreachable on Android, WDA unreachable on iOS) → one warning, all element regions skipped, coordinate regions still upload
+
+## Runtime support
+
+This SDK is supported on **BrowserStack Maestro sessions** (Android and iOS). The Percy CLI's `/percy/maestro-screenshot` relay expects BrowserStack's session-directory file layout (`/tmp/{sessionId}_test_suite/logs/*/screenshots/{name}.png`). Running `maestro test` locally on your laptop is not a supported runtime — the healthcheck will pass but screenshot uploads will 404.
 
 ## BrowserStack Integration
 
@@ -284,17 +332,42 @@ The Percy Maestro SDK works in two stages:
 
 ## Features not supported
 
-These features from other Percy SDKs are not applicable to the Maestro environment:
+This section is split into two parts so you can tell *can't build on this runtime* apart from *haven't built yet*.
 
-| Feature | Reason |
+### Architectural limits (not feasible on this runtime)
+
+These features are blocked by the Maestro / BrowserStack / GraalJS runtime itself. They are not on our roadmap because the underlying environment does not support the mechanism.
+
+| Feature | Reason | Workaround |
+|---------|--------|-----------|
+| BrowserStack session ↔ Percy build correlation via `browserstack_executor: percyScreenshot begin/end` | Maestro's GraalJS script environment has no Appium driver or `executeScript` surface through which the `browserstack_executor:` string is interpreted. Equivalent correlation would require a BrowserStack Maestro-runner infra change, not an SDK change. | Match `--build-name` between `percy app:exec` and the BrowserStack Maestro build request, or read `BROWSERSTACK_BUILD_ID` from the Maestro flow env and include it in your snapshot names. |
+| `fullPage` / `scrollableXpath` / `scrollableId` / `screenLengths` | Maestro controls scrolling via YAML `scroll` commands. | Capture multiple screenshots with `scroll` steps between them. |
+| `freezeAnimations` / `percyCSS` / `enableJavascript` | DOM/web-specific. Native mobile screenshots are bitmap captures — no DOM to manipulate. | Use Maestro's own animation controls (e.g., `waitForAnimationToEnd`) before `takeScreenshot`. |
+| XPath region selectors on Android | Android view hierarchy does not expose XPath. | Use `resource-id` / `text` / `content-desc` / `class` instead. |
+| Auto-detect device metadata on iOS | Maestro's GraalJS sandbox blocks native iOS bindings (`uname`, `UIDevice.current`, `XCUIDevice.shared.orientation`) that SDKs like `percy-xcui-swift` use. | Pass `PERCY_DEVICE_NAME`, `PERCY_OS_VERSION`, `PERCY_SCREEN_WIDTH`, `PERCY_SCREEN_HEIGHT`, `PERCY_ORIENTATION` via flow env vars. |
+| Percy on Automate (POA) | POA requires Appium-style driver capabilities and a live session; Maestro has no equivalent execution model. | Use standard Percy snapshot uploads (this SDK) for Maestro-on-BrowserStack. |
+| iOS simulator | BrowserStack runs real iOS devices; the SDK is not tested against simulators. | Use BrowserStack real-device iOS sessions. |
+| Local `maestro test` runtime | The CLI relay expects BrowserStack's session-directory file layout. | Run on BrowserStack Maestro. See [Runtime support](#runtime-support). |
+
+### Deferred / on roadmap
+
+These are implemented partially or not yet and are expected to land in a future round. Use the interim workaround if you are blocked today.
+
+**Planned for the next round:**
+
+| Feature | Status | Interim workaround |
+|---------|--------|-------------------|
+| `PERCY_IGNORE_ERRORS` / `PERCY_ENABLED` kill-switches | Appium-style config; next-round plan tracked at [`docs/plans/2026-04-23-001-feat-kill-switches-plan.md`](docs/plans/2026-04-23-001-feat-kill-switches-plan.md). Target: next sprint. | Unset `PERCY_TOKEN` in your Maestro flow env to disable Percy without a code change, or remove the `percy-init` / `percy-screenshot` `runFlow` steps from your flow. |
+| iOS element-region V1.1 selectors (`text`, `xpath`) | V1 ships `id` + `class` only. `text` requires WDA predicate-string escaping; `xpath` requires a DoS-complexity heuristic. Both deferred to V1.1. | Use `id` or `class` selectors on iOS in the meantime, or fall back to coordinate-based regions. |
+
+**Under evaluation (no committed timeline):**
+
+| Feature | Status |
 |---------|--------|
-| `scrollableXpath` / `scrollableId` / `screenLengths` / `fullPage` | Maestro controls scrolling via YAML `scroll` command. Capture multiple screenshots with scroll steps between them. |
-| `freezeAnimations` / `percyCSS` / `enableJavascript` | DOM/web-specific features. Native mobile screenshots are bitmap captures — no DOM to manipulate. |
-| XPath region selectors | Element resolution on Android uses view hierarchy attributes (`resource-id`, `text`, `content-desc`, `class`) via ADB. On iOS, element resolution would use WebDriverAgent selectors (`accessibility_id`, `predicate`, etc.). Both are deferred — see the Element-based regions note above. |
-| App Automate features | Maestro uses the generic Percy path, not BrowserStack App Automate. |
-| iOS simulator | BrowserStack runs real iOS devices; the SDK is not tested against simulators. |
-| Element-based regions | Coordinate-based regions only; element resolution deferred for both platforms. See [Regions](#regions) for details. |
-| Auto-detect device metadata on iOS | Maestro's GraalJS sandbox blocks native iOS bindings (`uname`, `UIDevice.current`, `XCUIDevice.shared.orientation`) that SDKs like `percy-xcui-swift` use. Pass `PERCY_DEVICE_NAME`, `PERCY_OS_VERSION`, `PERCY_SCREEN_WIDTH`, `PERCY_SCREEN_HEIGHT`, `PERCY_ORIENTATION` via flow env vars instead. |
+| `PERCY_LABELS` rendering in Percy dashboard | The SDK forwards `labels` to the Percy CLI relay correctly, but `percy/core` 1.31.11-beta.0 (and current stable) rejects `labels` on the snapshot-options schema as `"unknown property"` and strips it client-side. Snapshot still uploads; labels are not stored. Fix is a `percy/core` schema update — not an SDK change. |
+| `/percy/events` failure telemetry | Not yet forwarded by the SDK. |
+| Sync mode (`PERCY_SYNC`) | Implemented in the SDK (accepts the env var and logs the sync result when the relay returns one) but unproven end-to-end on BrowserStack; a prior round saw a 403 on the sync-result query that is believed unrelated backend behavior. |
+| `PERCY_TH_TEST_CASE_EXECUTION_ID` dashboard rendering | The SDK forwards this field to the Percy backend (verified end-to-end). However, no Percy dashboard surface currently renders it — this is a `percy-api` serializer gap, tracked separately from this SDK. TestHub integrators can read the value from the Percy CLI debug log. |
 
 ## Links
 
