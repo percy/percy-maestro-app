@@ -54,7 +54,8 @@ function runPercyHealthcheckInline() {
       output.percyEnabled = false;
     }
   } catch (hcError) {
-    logDisabledBanner("Percy CLI is not reachable at percy.cli:5338 (" + hcError + ")");
+    var failedServer = (typeof hcServer !== "undefined" && hcServer) ? hcServer : "http://percy.cli:5338";
+    logDisabledBanner("Percy CLI is not reachable at " + failedServer + " (" + hcError + ")");
     output.percyEnabled = false;
   }
 }
@@ -159,7 +160,7 @@ try {
       }
 
       // Sync mode
-      if (typeof PERCY_SYNC !== "undefined" && PERCY_SYNC === "true") {
+      if (typeof PERCY_SYNC !== "undefined" && PERCY_SYNC && String(PERCY_SYNC).toLowerCase() === "true") {
         payload.sync = true;
         console.log("[percy] Sync mode enabled");
       }
@@ -173,7 +174,7 @@ try {
         var nbh = parseInt(PERCY_NAV_BAR_HEIGHT);
         if (!isNaN(nbh)) payload.navBarHeight = nbh;
       }
-      if (typeof PERCY_FULLSCREEN !== "undefined" && PERCY_FULLSCREEN === "true") {
+      if (typeof PERCY_FULLSCREEN !== "undefined" && PERCY_FULLSCREEN && String(PERCY_FULLSCREEN).toLowerCase() === "true") {
         payload.fullscreen = true;
       }
 
@@ -183,7 +184,7 @@ try {
       }
 
       payload.platform = maestro.platform;
-      payload.clientInfo = "percy-maestro/1.0.0";
+      payload.clientInfo = "percy-maestro/0.4.0";
       payload.environmentInfo = "percy-maestro";
 
       // POST to the relay endpoint — Percy CLI reads the file from disk

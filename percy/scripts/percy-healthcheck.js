@@ -52,6 +52,7 @@ try {
   }
 } catch (error) {
   // Connection refused, DNS failure, timeout, or any JS runtime error land here.
-  logDisabledBanner("Percy CLI is not reachable at percy.cli:5338 (" + error + ")");
+  var failedServer = (typeof percyServer !== "undefined" && percyServer) ? percyServer : "http://percy.cli:5338";
+  logDisabledBanner("Percy CLI is not reachable at " + failedServer + " (" + error + ")");
   output.percyEnabled = false;
 }

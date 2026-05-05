@@ -359,7 +359,7 @@ These are implemented partially or not yet and are expected to land in a future 
 
 | Feature | Status | Interim workaround |
 |---------|--------|-------------------|
-| `PERCY_IGNORE_ERRORS` / `PERCY_ENABLED` kill-switches | Appium-style config; next-round plan tracked at [`docs/plans/2026-04-23-001-feat-kill-switches-plan.md`](docs/plans/2026-04-23-001-feat-kill-switches-plan.md). Target: next sprint. | Unset `PERCY_TOKEN` in your Maestro flow env to disable Percy without a code change, or remove the `percy-init` / `percy-screenshot` `runFlow` steps from your flow. |
+| `PERCY_IGNORE_ERRORS` / `PERCY_ENABLED` kill-switches | Appium-style config; planned for the next sprint. | Unset `PERCY_TOKEN` in your Maestro flow env to disable Percy without a code change, or remove the `percy-init` / `percy-screenshot` `runFlow` steps from your flow. |
 | iOS element-region V1.1 selectors (`text`, `xpath`) | V1 ships `id` + `class` only. `text` requires WDA predicate-string escaping; `xpath` requires a DoS-complexity heuristic. Both deferred to V1.1. | Use `id` or `class` selectors on iOS in the meantime, or fall back to coordinate-based regions. |
 
 **Under evaluation (no committed timeline):**
