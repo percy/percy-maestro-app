@@ -1,3 +1,5 @@
+appId: _percy_subflow
+name: percy-screenshot
 ---
 - takeScreenshot: ${SCREENSHOT_NAME}
 - runScript: ../scripts/percy-screenshot.js
