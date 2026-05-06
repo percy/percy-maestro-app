@@ -1,8 +1,30 @@
 # Changelog
 
-All notable changes to percy-maestro are documented in this file.
+All notable changes to `@percy/maestro-app` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0-beta.0] — 2026-05-06
+
+### Changed
+
+- **Distribution: now an npm package.** The SDK is now published as `@percy/maestro-app` on npm. Previously customers were instructed to copy the `percy/` directory into their workspace. The old "copy this directory" workflow continues to work — `npm install --save-dev @percy/maestro-app` produces the same `percy/flows/` and `percy/scripts/` layout under `node_modules/@percy/maestro-app/percy/`, which can either be referenced by path or vendored into a flows zip.
+- **`clientInfo` telemetry string changed** from `percy-maestro/X.Y.Z` to `percy-maestro-app/X.Y.Z`. Internal queries against Percy CLI debug logs that filtered on `percy-maestro/` should be widened to also match `percy-maestro-app/`.
+- **README rewritten** around the npm install workflow, with a recommended vendor-copy pattern (`prepare-zip` style script) for BrowserStack zip uploads.
+
+### Added
+
+- `package.json` with explicit `files` whitelist — only `percy/`, `README.md`, `LICENSE`, and `CHANGELOG.md` ship in the published tarball.
+- `RELEASING.md` documenting the bump checklist, beta-soak protocol, content-audit step, 2FA + provenance requirements, and deprecate-and-patch rollback template.
+
+### Migration
+
+If you previously copied the `percy/` directory into your Maestro workspace by hand, you can keep doing exactly that — npm now gives you a versioned source. Two consumption modes are supported:
+
+- **Reference under `node_modules`:** `runFlow: ../node_modules/@percy/maestro-app/percy/flows/percy-screenshot.yaml`
+- **Vendor copy (recommended for BrowserStack zip uploads):** `cp -r node_modules/@percy/maestro-app/percy ./percy` then keep your existing `runFlow: percy/flows/percy-screenshot.yaml` calls
+
+See the [README](./README.md) for full details.
 
 ## [0.4.0] — 2026-04-21
 
