@@ -75,6 +75,15 @@ try {
     if (typeof SCREENSHOT_NAME === "undefined" || !SCREENSHOT_NAME) {
       throw new Error("SCREENSHOT_NAME is required");
     }
+    // Validate the screenshot name. The Percy CLI relay enforces
+    // /^[a-zA-Z0-9_-]+$/ on the `name` field. Maestro's `takeScreenshot:` step
+    // (which ran before this script) writes the file as `<name>.png` using the
+    // raw name — so silently sanitizing here would create a file/payload
+    // mismatch and the relay would not find the file. Failing fast with a
+    // clear error gives the customer something they can act on.
+    if (!/^[a-zA-Z0-9_-]+$/.test(SCREENSHOT_NAME)) {
+      throw new Error("[percy] SCREENSHOT_NAME must match [a-zA-Z0-9_-]+ (alphanumeric, underscore, hyphen). Got: \"" + SCREENSHOT_NAME + "\"");
+    }
     if (typeof PERCY_SESSION_ID === "undefined" || !PERCY_SESSION_ID) {
       console.log("[percy] PERCY_SESSION_ID not set — cannot upload screenshot. Is appPercy enabled?");
     } else {
@@ -184,7 +193,7 @@ try {
       }
 
       payload.platform = maestro.platform;
-      payload.clientInfo = "percy-maestro-app/1.0.0-beta.0";
+      payload.clientInfo = "percy-maestro-app/1.0.0-beta.1";
       payload.environmentInfo = "percy-maestro";
 
       // POST to the relay endpoint — Percy CLI reads the file from disk
