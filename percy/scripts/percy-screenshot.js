@@ -184,7 +184,7 @@ try {
       }
 
       payload.platform = maestro.platform;
-      payload.clientInfo = "percy-maestro/0.4.0";
+      payload.clientInfo = "percy-maestro-app/1.0.0-beta.0";
       payload.environmentInfo = "percy-maestro";
 
       // POST to the relay endpoint — Percy CLI reads the file from disk
