@@ -1,4 +1,4 @@
-# percy-maestro
+# @percy/maestro-app
 
 [Percy](https://percy.io) visual testing for [Maestro](https://maestro.mobile.dev/) mobile testing flows. Supports Android and iOS.
 
@@ -7,13 +7,41 @@
 
 ## Prerequisites
 
-- [Percy CLI](https://github.com/percy/cli) with maestro-screenshot relay support
+- Node.js 14+ and npm (or yarn)
+- [`@percy/cli`](https://github.com/percy/cli) with maestro-screenshot relay support
 - [Maestro](https://maestro.mobile.dev/) 2.0+
 - An Android or iOS app under test (iOS supported on BrowserStack real devices)
 
 ## Installation
 
-Copy the `percy/` directory into your Maestro workspace:
+```sh
+npm install --save-dev @percy/maestro-app @percy/cli
+```
+
+The SDK is a set of Maestro sub-flows and GraalJS scripts. Two consumption modes are supported — both target BrowserStack Maestro sessions (the only [supported runtime](#runtime-support)). They differ only in zip composition.
+
+### Mode A — Reference under `node_modules`
+
+Reference the SDK files directly from your YAML flow:
+
+```yaml
+- runFlow:
+    file: ../node_modules/@percy/maestro-app/percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: Home
+```
+
+When zipping for BrowserStack upload, include `node_modules/@percy/maestro-app/` next to your `flows/` directory in the zip.
+
+### Mode B — Vendor copy (recommended for BrowserStack uploads)
+
+Copy the SDK into your workspace as part of your zip-prep step:
+
+```sh
+cp -r node_modules/@percy/maestro-app/percy ./percy
+```
+
+Your zipped workspace then has the layout used by every example in this README:
 
 ```
 your-maestro-workspace/
@@ -27,7 +55,20 @@ your-maestro-workspace/
   your-flow.yaml
 ```
 
-No package manager or build step is required. The SDK is a set of Maestro sub-flows and JS scripts that you include directly in your workspace.
+And your YAML uses the shorter path:
+
+```yaml
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: Home
+```
+
+Mode B produces a smaller zip with no path-resolution surprises and is migration-compatible with the pre-1.0 "copy this directory" workflow — your existing YAML keeps working unchanged.
+
+### Migrating from the pre-npm distribution
+
+If you previously copied the `percy/` directory into your workspace by hand, npm now gives you a versioned source. Mode B's `cp` step replaces the manual copy; your flow YAML does not change.
 
 ## Usage
 
@@ -269,7 +310,15 @@ This SDK is supported on **BrowserStack Maestro sessions** (Android and iOS). Th
 
 ## BrowserStack Integration
 
-You can run Percy Maestro flows on BrowserStack by uploading your Maestro workspace (including the `percy/` directory) as a zip to the BrowserStack Maestro API.
+You can run Percy Maestro flows on BrowserStack by uploading your Maestro workspace as a zip to the BrowserStack Maestro API. The recommended pattern is **Mode B (vendor copy)** from the [Installation](#installation) section: copy `node_modules/@percy/maestro-app/percy` into your workspace, then zip and upload.
+
+```sh
+npm install --save-dev @percy/maestro-app @percy/cli
+cp -r node_modules/@percy/maestro-app/percy ./percy
+cd flows && zip -r ../Flows.zip . && cd ..
+```
+
+The resulting `Flows.zip` contains your YAML flows plus a vendored `percy/` directory at the same path your `runFlow:` calls reference.
 
 ### Enabling Percy in a BrowserStack build
 
