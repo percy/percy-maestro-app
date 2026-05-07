@@ -1,5 +1,7 @@
 # PR #2210 Self-Notes — `setMaestroHierarchyDrift` Rename + Two-Slot Shape
 
+> ⚠ **OBSOLETE (2026-05-07).** Sriram567 closed PRs #2202 and #2210 and merged the entire iOS-regions+drift bundle as a single PR from `feat/maestro-ios-http-resolver`. The rename + two-slot shape this artifact's diff was meant to land in #2210 instead landed natively in Unit 4 of the consolidated plan (commit `35957fc7`). Retained for historical reference of the design decision; do NOT apply the diff anywhere.
+
 **Reframed 2026-05-07:** originally drafted as an external-coordination comment for #2210's author. Single ownership confirmed across PR #2202, PR #2210, and this plan (all by Sriram567), so this is now self-notes — a pre-baked diff and rationale for the rename, ready to paste into a #2210 commit message or split into a separate commit before #2210 merges.
 
 Companion to `2026-05-06-004-feat-cross-platform-maestro-resolver-unification-plan.md`. Originally tied to Plan Viability Gate 4 (collapsed in this plan revision).

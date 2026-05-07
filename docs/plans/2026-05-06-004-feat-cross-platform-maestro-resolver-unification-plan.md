@@ -147,7 +147,7 @@ These conditions are *not* risks — they are pre-conditions that must hold for 
 - **Gate 1: ~~AUT bundleId discoverable from `/tmp/<sessionId>_test_suite/flows/*.yaml`~~ → DROPPED (2026-05-07).** Per Unit 1 source research at `cli-2.0.7`: PR #2365 has landed and the server detects the AUT itself via `RunningApp.getForegroundApp()`. Percy CLI sends `appIds: []` and the server returns the AUT's tree directly. The YAML scraping mitigation is no longer needed for the realmobile fast path. For older Maestro versions where empty `appIds` returns SpringBoard, the parser detects that case and routes to maestro-CLI shell-out fallback. **No bundleId discovery code in Unit 2.** This entire gate is obviated by upstream Maestro evolution. See `cli/packages/core/test/fixtures/maestro-ios-hierarchy/capture-notes.md` for the full source-citation chain.
 - **Gate 2: ~~`cli-2.0.7` source confirms PR #2365 + #2402 status~~ → RESOLVED (2026-05-07).** Unit 1 source research confirmed both PRs landed in `cli-2.0.7`. PR #2365: `ViewHierarchyHandler.swift:22` `let foregroundApp = RunningApp.getForegroundApp()` — no `appIds` parameter, server-side detection. PR #2402: `getAppViewHierarchy` returns `AXElement(children: [appHierarchy, statusBarsContainer])` — wrap is `[AUT, statusBarsContainer]` (not `[springboard, AUT]` from cli-1.39.13). Plan's parser rule "first `elementType == 1` whose `identifier != 'com.apple.springboard'`" remains correct because the statusBars wrapper has `elementType == 0`. Vendored fixtures committed to `cli/packages/core/test/fixtures/maestro-ios-hierarchy/` on `feat/maestro-ios-http-resolver` commit `65e54b9f`.
 - **Gate 3: ~~iOS-WIP "Unit 2b" attribute mapping landed~~ → RESOLVED (2026-05-07).** Single ownership confirmed (Sriram567 across PR #2202, PR #2210, this plan). **Option B chosen:** keep PR #2202 narrow (ships Plan A WDA-direct + Plan B Phase 1 scaffold); this plan's PR carries the new HTTP transport alongside whatever's still needed from Unit 2b's intended scope. **Reduced absorption scope** (per Unit 1 finding): Maestro's iOS TreeNode does not carry a `class` attribute — only `resource-id` (from `identifier`). The XCUI `elementType` integer-to-name table that was the bulk of "Unit 2b's intended work" is not needed for selector matching; iOS selector vocabulary is `id` only. So Unit 2 absorbs the iOS branch of `flattenMaestroNodes` (small adapter — convert raw `AXElement` HTTP shape to `{attributes: {id, bounds}, children}` shape) and replaces the `runMaestroIosDump` stub body, but does NOT need the XCUI table. Net Unit 2 absorbed scope is ~⅓ of what the deepening pass + document-review framing assumed.
-- **Gate 4: ~~Coordinate with PR #2210 author~~ → COLLAPSED (2026-05-07).** Single ownership across PR #2202, PR #2210, and this plan (all authored by Sriram567). What was framed as "cross-PR coordination" is actually a self-sequencing decision: either (a) push the `recordSchemaDrift` → `setMaestroHierarchyDrift({platform})` rename + two-slot shape into PR #2210 directly (cleanest — no rebase friction later), or (b) refactor in this plan's PR after #2210 merges (one author editing their own merged code is fine — no review-etiquette concern). Decision is between Sriram567 and Sriram567; no deadline needed. Recommend (a): the diff in `2026-05-06-004-pr2210-coordination-comment.md` is mechanical and lands in one #2210 commit with zero behavior change for Android.
+- **Gate 4: ~~Coordinate with PR #2210 author~~ → FULLY OBVIATED (2026-05-07).** Sriram567 closed #2202 and #2210; the entire iOS-regions+drift bundle merges as a single PR from this branch. The two-slot drift surface (`setMaestroHierarchyDrift({platform})` + `getMaestroHierarchyDrift()` + `__testing.resetMaestroHierarchyDrift()`) landed natively in Unit 4. Android slot stays unwritten because there's no Android-resolver work in this PR. The `2026-05-06-004-pr2210-coordination-comment.md` artifact is obsolete — its diff targeted #2210 specifically.
 - **Gate 5: BS realmobile iOS infra is healthy enough for Unit 6 (V3 regression) and Unit 7 (V4.2 concurrent harness) to run end-to-end before Unit 3b's default flip.** If BS infra is down for the validation window (recent memory: 5 builds failed 2026-04-27, 4 failed 2026-04-29), Unit 3b's flip pauses until validation can complete. Unit 3a (opt-in) can ship without this gate.
 
 ## High-Level Technical Design
@@ -323,7 +323,7 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 
 ---
 
-- [ ] **Unit 2: Build iOS resolver — `runIosHttpDump` HTTP transport + replace `runMaestroIosDump` stub + iOS branch of `flattenMaestroNodes`**
+- [x] **Unit 2: Build iOS resolver — `runIosHttpDump` HTTP transport + replace `runMaestroIosDump` stub + iOS branch of `flattenMaestroNodes`** — completed 2026-05-07 on branch `feat/maestro-ios-http-resolver` commit `dbc7b277`. 77/77 maestro-hierarchy specs pass (26 new iOS-path scenarios + existing Android tests unchanged). Drift-bit handling deferred to Unit 4 per plan.
 
 **Goal:** Add an HTTP-based primary dump path to the iOS branch of `maestroDump({platform: 'ios'})`. Mirrors the shape of #2210's `runGrpcDump` for Android, with one iOS-specific addition: SpringBoard-only response detection. Send `{"appIds": [], "excludeKeyboardElements": false}` to the runner — server detects AUT itself (PR #2365 landed in cli-2.0.7). Replace the iOS-WIP branch's `runMaestroIosDump` stub with a real maestro-CLI fallback parser. Add the iOS branch of `flattenMaestroNodes` (small adapter from raw `AXElement` → `{attributes: {id, bounds}, children}` shape; existing `flattenMaestroNodes` already consumes Maestro's `TreeNode` shape so the CLI fallback path needs no iOS-specific changes).
 
@@ -435,7 +435,7 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 
 ---
 
-- [ ] **Unit 3a: Wire iOS HTTP as opt-in primary; CLI shell-out as fallback; per-snapshot relay-payload override (default REMAINS `wda-direct`)**
+- [x] **Unit 3a: Wire iOS HTTP as opt-in primary; CLI shell-out as fallback; per-snapshot relay-payload override (default REMAINS `wda-direct`)** — completed 2026-05-07 on branch `feat/maestro-ios-http-resolver` commit `7e048935`. 6/6 cascade tests pass + existing tests unchanged. Resolver cascade landed in api.js: per-snapshot body.resolver → PERCY_IOS_RESOLVER env → default wda-direct. Unknown body.resolver returns HTTP 400; unknown env values warn + fall back to wda-direct. sessionId threaded through to maestroDump.
 
 **Goal:** Make the iOS branch of `maestroDump` call `runIosHttpDump` first when opted in, fall through to maestro-CLI on connection-class / no-AUT-tree failures, set drift bit on schema-class failures. **Default behavior unchanged** — `PERCY_IOS_RESOLVER` remains effectively `wda-direct` when unset; customers must explicitly opt in to the HTTP path during the validation window. Add per-snapshot relay-payload `resolver` override for ops diagnostics.
 
@@ -538,7 +538,7 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 
 ---
 
-- [ ] **Unit 4: Refactor healthcheck `maestroHierarchyDrift` to two-slot shape (coordinate with #2210 author)**
+- [x] **Unit 4: Refactor healthcheck `maestroHierarchyDrift` to two-slot shape (coordinate with #2210 author)** — completed 2026-05-07 on branch `feat/maestro-ios-http-resolver` commit `35957fc7`. 6/6 new Unit 4 tests pass + existing /healthcheck test updated for two-slot envelope. iOS schema-class failures now flip the ios slot; android slot reserved for #2210's retrofit when it rebases atop this PR (worst-case path from Plan Viability Gate 4 — fresh greenfield setter, single-author owns both PRs so rebase coordination is internal).
 
 **Goal:** `/percy/healthcheck` exposes a two-slot `{android, ios}` drift envelope. Refactor #2210's setter to take a platform argument and write to the correct slot. Both platforms can drift simultaneously without losing signal.
 
@@ -594,7 +594,7 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 
 ---
 
-- [ ] **Unit 5: Cross-platform parity test — extend the iOS-WIP scaffold (V2)**
+- [x] **Unit 5: Cross-platform parity integration harness (V2)** — completed 2026-05-07 on branch `feat/maestro-ios-http-resolver` commit `8c34f2d2`. V1 is log-only (manual eyeball of Percy side-by-side); V1.1 may tighten to programmatic ±2px once example-app dimension table is documented.
 
 **Goal:** Same example app, same logical selector, same flow → bboxes within ±2px on both platforms. Extend the existing scaffolded harness from `feat/ios-element-regions-maestro-hierarchy`.
 
@@ -629,7 +629,7 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 
 ---
 
-- [ ] **Unit 6: WDA failure-class regression (V3)**
+- [x] **Unit 6: WDA failure-class regression harness (V3)** — completed 2026-05-07 commit `8c34f2d2`. Runs `ios-aut-crash-regions.yaml` twice (wda-direct vs maestro-hierarchy) and logs Percy warnings + build URLs for human verification.
 
 **Goal:** Reproducible test that proves the `[FBRoute raiseNoSessionException]` failure class is fixed by the HTTP path. Pre-fix run (with `PERCY_IOS_RESOLVER=wda-direct`) must reproduce the failure; post-fix run (default) must not.
 
@@ -663,7 +663,7 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 
 ---
 
-- [ ] **Unit 7: iOS HTTP concurrent-access harness (V4.2)**
+- [x] **Unit 7: iOS HTTP concurrent-access harness (V4.2)** — completed 2026-05-07 commit `8c34f2d2`. Mirrors the originally-planned PR #2210's gRPC concurrent harness shape: 100 iterations of runIosHttpDump while a Maestro pause flow holds the device active, captures p50/p95/p99 + KTD threshold check (p95 vs IOS_HTTP_HEALTHY_DEADLINE_MS=1500ms).
 
 **Goal:** Mirror PR #2210's R6 merge gate harness for iOS. Captures p50/p95/p99 timings under realistic concurrent load. Output drives the final `IOS_HTTP_HEALTHY_DEADLINE_MS` choice.
 
@@ -762,21 +762,20 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 - ~~AUT bundleId discovery edge cases~~ — *no longer applicable.* Per Unit 1's PR #2365 finding, no client-side bundleId discovery is performed; the server detects AUT itself when Percy sends `appIds: []`. The original deepening pass's YAML-related edge cases (`appId: ${SOME_VAR}`, missing `appId`, multiple flow files with different `appId`) are obviated. The remaining iOS-side risk surface is the SpringBoard-only response on older Maestro versions, mitigated by maestro-CLI shell-out fallback (which knows the AUT internally via Maestro's flow context).
 - **iOS selector vocabulary mismatch with SDK customers expecting `class` selectors.** Unit 1 surfaced that iOS Maestro's `TreeNode` does not carry `class` (only `resource-id`), so iOS Percy snapshots support `id` selectors only. Customers who write `region.element = {class: "XCUIElementTypeButton"}` against iOS get no match. Mitigation: SDK-side validation (V1.0 SDK already validates region shape — extend to reject `class` on iOS with a clear error message OR document iOS-Android selector vocabulary divergence in the README). Decision deferred to V1 release notes — for now Unit 2 silently skips iOS `class` selectors with a `[percy] Warning: class selectors not supported on iOS` log line per `firstMatch` invocation.
 
-### Branch sequencing — merge-order matrix
+### Branch sequencing — collapsed to single-PR (2026-05-07)
 
-**Reconciliation (2026-05-07):** PR #2202's head ref is `feat/ios-element-regions-maestro-hierarchy` — i.e., **PR #2202 IS the iOS-WIP branch.** Originally tracked as separate concerns in this plan; collapsed into one. Per #2202's own description, the PR combines what was previously split as #2201 (Plan A — WDA-direct, complete and demo-validated 2026-04-22) + #2202 (Plan B Phase 1 — maestro-hierarchy scaffold, with Unit 2b explicitly deferred to a follow-up PR). **This plan is effectively Plan B Phase 2 + the new HTTP transport** — the natural follow-up to #2202.
+**Final consolidation:** Sriram567 closed PRs #2202 (iOS regions Phase 1) and #2210 (Android gRPC) and merged the entire iOS-regions+drift bundle as a single PR from this branch. The previously-tracked merge-order matrix is moot.
 
-PR #2202 status (verified 2026-05-07): OPEN, REVIEW_REQUIRED, NOT MERGED. Gated on realmobile-side `PER-7281` (the env-injection ticket) before the WDA path can be production-validated.
+The single PR contains 13 commits:
+1. **9 commits from the originally-planned PR #2202** (Plan A WDA-direct + Plan B Phase 1 scaffold): `d097f077` (PNG dims) → `1792e376` (wda-session-resolver) → `d0cae9c3` (wda-hierarchy) → `d2eb348f` (api.js iOS branch) → `e7b9938b` (Node 14 fixes) → `a6942df6` (maestro hierarchy primary) → `9e2f3815` (rename adb→maestro hierarchy) → `403d89fc` (iOS scaffold) → `1b98ece6` (api.js dispatch) → `616cdd56` (parity test).
+2. **4 commits from this plan's units 1–4**: `65e54b9f` (Unit 1 fixtures) → `dbc7b277` (Unit 2 HTTP transport) → `7e048935` (Unit 3a resolver cascade) → `35957fc7` (Unit 4 two-slot drift envelope).
+3. **1 commit for units 5/6/7** integration harnesses: `8c34f2d2`.
 
-The plan touches `cli/packages/core/src/maestro-hierarchy.js` and `api.js`, which are also touched by PR #2202 (the iOS-WIP base) and PR #2210 (Android gRPC). Two-branch matrix:
-
-| #2202 status | #2210 status | This plan's posture |
-|---|---|---|
-| Open | Any | **Hard block.** This plan cannot land before its parent. Develop on top of #2202's branch; rebase as #2202 advances. |
-| Merged | Open | This plan rebases onto cli/master. Coordinate with #2210 author to pre-land Unit 4's platform arg in #2210 (no behavior change). This plan extends the existing setter for iOS; cleaner integration tax. |
-| Merged | Merged | Rebase straightforward. Unit 4 extends the existing platform-aware setter (assuming #2210's author agreed pre-merge). |
-| Merged | Abandoned | This plan's Unit 4 ports the setter from #2202's iOS-WIP baseline and adds platform arg from scratch. Drop #2210 dependency from Risks. Android `slot.android` stays unwritten until a future Android-resolver work lands; document as known-empty. |
-| Abandoned | Any | **Plan re-scope required.** This plan was layered on top of #2202's iOS scaffolding (api.js dispatch, parity test, env-var read scaffolding). If #2202 is rejected, this plan absorbs that scaffolding too — significant scope expansion. Surface as a Plan Viability Gate failure and route through `/ce:brainstorm`. |
+**Implications of consolidation:**
+- The Android gRPC fast path (originally PR #2210) is **not in this PR**. Android keeps the existing `maestro --udid <serial> hierarchy` CLI shell-out (~9s p50). Re-landing the gRPC path is a separate future PR if/when needed.
+- The android slot of `maestroHierarchyDrift` stays unwritten in production. Surface is forward-compat — any future Android-resolver work plugs into the existing setter without API change.
+- Plan Viability Gate 4 (cross-PR coordination on `recordSchemaDrift` rename) is fully obviated: the rename landed natively in Unit 4 with the two-slot shape designed from the start.
+- The `2026-05-06-004-pr2210-coordination-comment.md` artifact is obsolete; its diff was for refactoring #2210, not this PR.
 
 ### Dependencies
 
