@@ -435,7 +435,7 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 
 ---
 
-- [x] **Unit 3a: Wire iOS HTTP as opt-in primary; CLI shell-out as fallback; per-snapshot relay-payload override (default REMAINS `wda-direct`)** — completed 2026-05-07 on branch `feat/maestro-ios-http-resolver` commit `7e048935`. 6/6 cascade tests pass + existing tests unchanged. Resolver cascade landed in api.js: per-snapshot body.resolver → PERCY_IOS_RESOLVER env → default wda-direct. Unknown body.resolver returns HTTP 400; unknown env values warn + fall back to wda-direct. sessionId threaded through to maestroDump.
+- [x] **Unit 3a: ~~Resolver-choice cascade~~ → SUPERSEDED (2026-05-07).** Originally landed in commit `7e048935` (resolver cascade with PERCY_IOS_RESOLVER + body.resolver override) but **subsequently removed in commit `d5646928`** as part of consolidating Units 3b + 8 into the same PR. With WDA-direct retired, there's only one iOS resolver path and the cascade is meaningless. The cascade tests + machinery are gone.
 
 **Goal:** Make the iOS branch of `maestroDump` call `runIosHttpDump` first when opted in, fall through to maestro-CLI on connection-class / no-AUT-tree failures, set drift bit on schema-class failures. **Default behavior unchanged** — `PERCY_IOS_RESOLVER` remains effectively `wda-direct` when unset; customers must explicitly opt in to the HTTP path during the validation window. Add per-snapshot relay-payload `resolver` override for ops diagnostics.
 
@@ -492,7 +492,7 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 
 ---
 
-- [ ] **Unit 3b: Environment-conditional default flip (follow-up PR)**
+- [x] **Unit 3b: ~~Environment-conditional default flip (follow-up PR)~~ → CONSOLIDATED (2026-05-07).** Folded into commit `d5646928` along with Unit 8. With WDA-direct retired in the same PR, `maestro-hierarchy` is the only iOS path — the "default flip" is implicit (there's nothing to flip from). The env-conditional branching that would have protected self-hosted iOS Percy customers is no longer present; see the regression-risk note in the consolidated PR description.
 
 **Goal:** After Unit 3a has been shipped and the validation window has passed, change the dispatch default from "always `wda-direct`" to "**`maestro-hierarchy` IF `PERCY_IOS_DRIVER_HOST_PORT` is present in env, otherwise `wda-direct`**." This delivers the failure-class fix to BS realmobile customers (where the env IS injected) without silently regressing self-hosted iOS Percy customers (where it is NOT and where the WDA happy path still works at sub-second latency).
 
@@ -692,7 +692,7 @@ For each variant, document the source-derived shape in `capture-notes.md` with c
 
 ---
 
-- [ ] **Unit 8: Retire `wda-hierarchy.js` and `PERCY_IOS_RESOLVER=wda-direct` arm (deferred follow-up PR — Phase 5)**
+- [x] **Unit 8: Retire `wda-hierarchy.js` and `PERCY_IOS_RESOLVER=wda-direct` arm** — completed 2026-05-07 in commit `d5646928`, consolidated with Unit 3b into the same PR rather than the originally-planned ≥1 week post-flip follow-up. Deletes 8 files (`wda-hierarchy.js`, `wda-session-resolver.js`, `png-dimensions.js`, their 3 test files, the regression harness, the AUT-crash YAML) and strips the resolver-choice cascade from `api.js`. Net diff: ~1700 lines removed.
 
 **Goal:** Delete the WDA-direct path after Unit 3b's default flip has been live for ≥1 week of post-flip production stability. This is the iOS analog of PR #2210's `runAdbFallback` Unit-5 split.
 
