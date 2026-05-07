@@ -133,8 +133,8 @@ try {
             for (var ri = 0; ri < parsedRegions.length; ri++) {
               var region = parsedRegions[ri];
               // Element-based region: forward to the CLI relay, which resolves
-              // the selector to a pixel bbox per-platform (ADB on Android,
-              // WebDriverAgent source-dump on iOS). Shape validation + zero-match
+              // the selector to a pixel bbox per-platform (Maestro hierarchy
+              // on both Android and iOS). Shape validation + zero-match
               // warn-skip are the relay's responsibility — one source of truth.
               if (region.element) {
                 validRegions.push(region);
