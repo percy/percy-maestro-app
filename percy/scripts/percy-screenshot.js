@@ -193,7 +193,7 @@ try {
       }
 
       payload.platform = maestro.platform;
-      payload.clientInfo = "percy-maestro-app/1.0.0-beta.1";
+      payload.clientInfo = "percy-maestro-app/1.0.0-beta.2";
       payload.environmentInfo = "percy-maestro";
 
       // filePath: forward the absolute path set by percy-prepare-screenshot.js

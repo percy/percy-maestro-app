@@ -32,6 +32,7 @@ Confirm the tarball contains exactly:
 - `percy/flows/percy-init.yaml`
 - `percy/flows/percy-screenshot.yaml`
 - `percy/scripts/percy-healthcheck.js`
+- `percy/scripts/percy-prepare-screenshot.js`
 - `percy/scripts/percy-screenshot.js`
 
 Anything else is a `files` whitelist mistake — fix it before continuing.
