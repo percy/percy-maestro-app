@@ -95,14 +95,14 @@ appId: com.example.myapp
 - runFlow:
     file: percy/flows/percy-screenshot.yaml
     env:
-      SCREENSHOT_NAME: Home Screen
+      SCREENSHOT_NAME: HomeScreen
 
 - tapOn: "Settings"
 
 - runFlow:
     file: percy/flows/percy-screenshot.yaml
     env:
-      SCREENSHOT_NAME: Settings Screen
+      SCREENSHOT_NAME: SettingsScreen
 ```
 
 Run the flow with Percy:
@@ -129,7 +129,7 @@ Device metadata and other options are passed as environment variables to your Ma
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SCREENSHOT_NAME` | Yes (per screenshot) | - | Name for the screenshot; must be unique per snapshot |
+| `SCREENSHOT_NAME` | Yes (per screenshot) | - | Name for the screenshot; must be unique per snapshot. **Must match `[a-zA-Z0-9_-]+`** — see [Snapshot naming](#snapshot-naming). |
 | `PERCY_SERVER` | No | `http://percy.cli:5338` | Percy CLI server address |
 | `PERCY_DEVICE_NAME` | Yes | - | Device name for the Percy tag (e.g. `Pixel 7`) |
 | `PERCY_OS_VERSION` | Yes | - | OS version (e.g. `13` for Android, `17` for iOS) |
@@ -162,6 +162,32 @@ npx percy app:exec -- maestro test \
   -e PERCY_NAV_BAR_HEIGHT="48" \
   your-flow.yaml
 ```
+
+### Snapshot naming
+
+The Percy CLI relay endpoint validates `SCREENSHOT_NAME` against `^[a-zA-Z0-9_-]+$`. Allowed characters: lowercase/uppercase letters, digits, underscore (`_`), and hyphen (`-`). Anything else (spaces, em-dashes, dots, slashes) is rejected with HTTP 400 `"Invalid screenshot name"`.
+
+The SDK validates the name **before** sending the request and throws a clear error if it doesn't match — your Maestro flow fails the `runScript:` step with a message you can act on.
+
+**Good:**
+
+```yaml
+SCREENSHOT_NAME: HomeScreen
+SCREENSHOT_NAME: settings_screen
+SCREENSHOT_NAME: cart-checkout-step-2
+SCREENSHOT_NAME: Build_42_LandingPage
+```
+
+**Bad (rejected):**
+
+```yaml
+SCREENSHOT_NAME: "Home Screen"        # spaces
+SCREENSHOT_NAME: "Home — Step 1"      # em-dash + spaces
+SCREENSHOT_NAME: "settings.screen"    # dot
+SCREENSHOT_NAME: "auth/login"         # slash
+```
+
+Why the strict pattern: the CLI uses the name to build a filesystem glob (`/tmp/{sessionId}_test_suite/logs/*/screenshots/{name}.png`). Anything outside this character class could break the glob or expose path-traversal surface. Use underscore as your default separator.
 
 ### iOS-specific guidance
 
@@ -322,7 +348,7 @@ The resulting `Flows.zip` contains your YAML flows plus a vendored `percy/` dire
 
 ### Enabling Percy in a BrowserStack build
 
-The way you enable Percy in the BrowserStack Maestro build API **differs between iOS and Android**. Android uses `percyOptions`; iOS uses `appPercy`. This asymmetry is intentional — `appPercy` matches BrowserStack's iOS convention (as used by the `percy-xcui-swift` SDK), and Android's `percyOptions` is already in production use.
+Both Android and iOS Maestro builds use the same `appPercy` field:
 
 **Android:**
 
@@ -335,9 +361,8 @@ curl -u "$BS_USER:$BS_KEY" \
     "testSuite": "<TEST_SUITE_URL>",
     "devices": ["Samsung Galaxy S22-13.0"],
     "project": "my-percy-maestro-project",
-    "percyOptions": {
-      "enabled": true,
-      "percyToken": "<PERCY_TOKEN>"
+    "appPercy": {
+      "PERCY_TOKEN": "<PERCY_TOKEN>"
     }
   }'
 ```
@@ -362,7 +387,7 @@ curl -u "$BS_USER:$BS_KEY" \
   }'
 ```
 
-On iOS, the `appPercy.env` sub-object can carry any `PERCY_*` environment variable your Percy build should see — commonly `PERCY_BRANCH`, `PERCY_PROJECT`, `PERCY_COMMIT`. These values are forwarded into the Percy CLI's environment on the BrowserStack host.
+The `appPercy.env` sub-object can carry any `PERCY_*` environment variable your Percy build should see — commonly `PERCY_BRANCH`, `PERCY_PROJECT`, `PERCY_COMMIT`. These values are forwarded into the Percy CLI's environment on the BrowserStack host.
 
 **Note on naming:** BrowserStack's public-API parameter is camelCase (`appPercy`). On the BrowserStack host, it is translated to snake_case (`app_percy`) in internal session params. Customers pass `appPercy`; the translation is automatic.
 
@@ -379,7 +404,7 @@ The Percy Maestro SDK works in two stages:
 
 1. **Initialization (lazy)** -- The first `percy-screenshot` call in a flow runs a healthcheck against the Percy CLI server to verify it is available, caching the result in `output.percyEnabled` so subsequent screenshots short-circuit. If the CLI is not running or not reachable, Percy is silently disabled for the rest of the flow. The optional `percy-init` sub-flow runs the same healthcheck eagerly at flow start — useful when you want CI logs to surface a Percy outage before any test steps.
 
-2. **Screenshot capture** -- Each `percy-screenshot` sub-flow call uses Maestro's built-in `takeScreenshot` command to save a PNG to disk, then runs a JS script that sends screenshot metadata (name, session ID, device tag, regions, tile options) as a JSON POST to the Percy CLI's `/percy/maestro-screenshot` relay endpoint. The Percy CLI finds the screenshot file on disk, base64-encodes it, resolves any element-based regions, and uploads the comparison.
+2. **Screenshot capture** -- Each `percy-screenshot` sub-flow call runs in three internal steps: (1) a prepare script computes the screenshot save path -- an absolute path the SDK owns for Percy CLI ≥ 1.31.11-beta.1 (`/tmp/<sid>{_test_suite}/percy/<name>.png`), or the legacy `SCREENSHOTS_DIR`-relative fallback for older CLIs; (2) Maestro's built-in `takeScreenshot` command saves the PNG to that path; (3) an upload script POSTs screenshot metadata (name, session ID, device tag, regions, tile options, optional `filePath`) as JSON to the Percy CLI's `/percy/maestro-screenshot` relay endpoint. The Percy CLI then reads the file (directly via `filePath` on new CLIs, or via its glob on older CLIs), base64-encodes it, resolves any element-based regions, and uploads the comparison. The customer-facing `runFlow:` shape does not change between CLI versions.
 
 ## Features not supported
 

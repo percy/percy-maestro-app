@@ -4,6 +4,52 @@ All notable changes to `@percy/maestro-app` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.2] — 2026-05-12
+
+Decouple the screenshot save path from the BrowserStack-infra `SCREENSHOTS_DIR` convention. The SDK now owns the path end-to-end when the running Percy CLI supports the new `filePath` field on `/percy/maestro-screenshot`; older CLIs fall back to the existing behavior with no customer-visible change. Surfaced by build `0444158…` where a BS-infra patch put PNGs one directory level too shallow relative to the CLI's hardcoded glob and snapshots silently failed with `"Snapshot command was not called"`.
+
+### Added
+
+- **`percy/scripts/percy-prepare-screenshot.js`** — new prepare runScript that runs immediately before `takeScreenshot:` inside the `percy-screenshot` subflow. Computes the screenshot save path: `/tmp/<sid>_test_suite/percy/<name>.png` on Android, `/tmp/<sid>/percy/<name>.png` on iOS, when the running Percy CLI is `≥ 1.31.11-beta.1`. Falls back to the relative `SCREENSHOT_NAME` for older CLIs. Sets `output.percyScreenshotPath` and `output.percyUsesFilePath` for downstream steps.
+
+### Changed
+
+- **`percy/flows/percy-screenshot.yaml`** — now a three-step subflow: prepare → takeScreenshot → upload. The customer-facing usage (`- runFlow: percy/flows/percy-screenshot.yaml`) is unchanged; the change is entirely internal to the subflow.
+- **`percy/scripts/percy-screenshot.js`** — reads `output.percyUsesFilePath` and `output.percyScreenshotPath` from the prepare step and forwards the absolute path as the `filePath` payload field when the version gate passes. Omits `filePath` entirely on the legacy path so older CLIs see a byte-identical payload to v1.0.0-beta.1.
+
+### Compatibility
+
+- **Percy CLI `≥ 1.31.11-beta.1`** — the SDK posts `filePath` and the CLI reads the file directly, skipping the legacy glob.
+- **Percy CLI `< 1.31.11-beta.1`** — the SDK falls back to the relative `SCREENSHOT_NAME`, Maestro saves wherever `SCREENSHOTS_DIR` points (BS-infra contract). The CLI's legacy glob finds the file as before. No customer-visible behaviour change.
+
+The version gate compares `x-percy-core-version` from the healthcheck response; unknown / malformed version strings degrade safely to the legacy path.
+
+### BrowserStack-infra notes
+
+The v4 `SCREENSHOTS_DIR=…/screenshots` patch in `mobile-pr/android/maestro/scripts/maestro_runner.rb` is no longer the primary save-location signal but remains as a back-compat safety net for customers running older SDK + new CLI. Removal can be tracked separately once older SDK versions are retired from customer test suites.
+
+### `clientInfo`
+
+Telemetry string bumps from `percy-maestro-app/1.0.0-beta.1` to `percy-maestro-app/1.0.0-beta.2` per the bump checklist in [`RELEASING.md`](./RELEASING.md).
+
+## [1.0.0-beta.1] — 2026-05-06
+
+Pre-publish iteration. Issues found during the first end-to-end smoke on a real BrowserStack Maestro v2 build (host `31.6.63.33`, Samsung Galaxy S22, build `https://percy.io/9560f98d/app/androidmaestroapp-e4f6fe82/builds/49435096`).
+
+### Fixed
+
+- **`SCREENSHOT_NAME` strict-naming gate.** The Percy CLI relay endpoint validates names against `^[a-zA-Z0-9_-]+$` and returns HTTP 400 `"Invalid screenshot name"` for anything else (spaces, em-dashes, dots, slashes). Previously the SDK forwarded the name as-is and the relay rejection only surfaced as a generic `[percy] Upload failed: 400` line — easy to miss in BS dashboard logs. The SDK now validates the name in `percy/scripts/percy-screenshot.js` before the POST and throws a clear error: `[percy] SCREENSHOT_NAME must match [a-zA-Z0-9_-]+`. The `takeScreenshot:` step writes the file using the raw name, so silent sanitization would create a file/payload mismatch — failing fast is the right move.
+
+### Changed
+
+- **README: BrowserStack build payload uses `appPercy` for both Android and iOS.** Previous docs split Android (`percyOptions`) from iOS (`appPercy`). End-to-end testing on BS Maestro v2 confirms the Android `/maestro/v2/android/build` endpoint silently drops `percyOptions` — the working field name is `appPercy` on both platforms. The "Note on naming" paragraph (camelCase → snake_case translation) still applies to both.
+- **README: `Snapshot naming` section added.** Explicit good / bad examples and the rationale for the character-class restriction (the CLI uses the name in a filesystem glob).
+- **README: example snapshot names use safe characters.** `Home Screen` / `Settings Screen` are now `HomeScreen` / `SettingsScreen` (would have been rejected by the relay if a customer had copy-pasted them verbatim).
+
+### `clientInfo`
+
+Telemetry string bumps from `percy-maestro-app/1.0.0-beta.0` to `percy-maestro-app/1.0.0-beta.1` per the bump checklist in [`RELEASING.md`](./RELEASING.md).
+
 ## [1.0.0-beta.0] — 2026-05-06
 
 ### Changed
