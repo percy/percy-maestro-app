@@ -120,14 +120,16 @@ try {
     if (canUseFilePath) {
       // New path: SDK owns the screenshot location, under the existing BS
       // session root so cleanup is inherited.
-      //   Android  → /tmp/<sid>_test_suite/percy/<name>.png
-      //   iOS      → /tmp/<sid>/percy/<name>.png
-      // Maestro's `takeScreenshot:` accepts absolute paths verbatim and
-      // creates parent directories implicitly.
+      //   Android  → /tmp/<sid>_test_suite/percy/<name>(.png appended by Maestro)
+      //   iOS      → /tmp/<sid>/percy/<name>(.png appended by Maestro)
+      // Maestro's `takeScreenshot:` auto-appends `.png` — do NOT include it
+      // in the path here, otherwise the file lands at `<name>.png.png`.
+      // percy-screenshot.js appends `.png` when constructing the filePath
+      // it sends to the CLI relay so both ends agree on the final filename.
       if (maestro.platform === "ios") {
-        output.percyScreenshotPath = "/tmp/" + PERCY_SESSION_ID + "/percy/" + SCREENSHOT_NAME + ".png";
+        output.percyScreenshotPath = "/tmp/" + PERCY_SESSION_ID + "/percy/" + SCREENSHOT_NAME;
       } else {
-        output.percyScreenshotPath = "/tmp/" + PERCY_SESSION_ID + "_test_suite/percy/" + SCREENSHOT_NAME + ".png";
+        output.percyScreenshotPath = "/tmp/" + PERCY_SESSION_ID + "_test_suite/percy/" + SCREENSHOT_NAME;
       }
       output.percyUsesFilePath = true;
     }

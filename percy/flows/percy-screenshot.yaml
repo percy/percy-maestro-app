@@ -5,5 +5,5 @@ name: percy-screenshot
 # new CLIs, falls back to relative SCREENSHOT_NAME for older CLIs) and sets
 # output.percyScreenshotPath / output.percyUsesFilePath for downstream steps.
 - runScript: ../scripts/percy-prepare-screenshot.js
-- takeScreenshot: ${percyScreenshotPath}
+- takeScreenshot: ${output.percyScreenshotPath}
 - runScript: ../scripts/percy-screenshot.js

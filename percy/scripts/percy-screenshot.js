@@ -201,8 +201,11 @@ try {
       // script only reads it. Older CLIs that don't recognise filePath fall
       // through to the legacy glob — but in that case prepare leaves
       // percyUsesFilePath false, so we omit the field entirely.
+      // Append `.png` here because percyScreenshotPath omits the extension
+      // (Maestro's takeScreenshot: auto-appends it, so prepare leaves it
+      // off to avoid `<name>.png.png` on disk).
       if (output.percyUsesFilePath && output.percyScreenshotPath) {
-        payload.filePath = output.percyScreenshotPath;
+        payload.filePath = output.percyScreenshotPath + ".png";
       }
 
       // POST to the relay endpoint — Percy CLI reads the file from disk
