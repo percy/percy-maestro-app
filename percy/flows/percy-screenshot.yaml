@@ -1,5 +1,9 @@
 appId: _percy_subflow
 name: percy-screenshot
 ---
-- takeScreenshot: ${SCREENSHOT_NAME}
+# prepare: decides the screenshot path (absolute under BS session root for
+# new CLIs, falls back to relative SCREENSHOT_NAME for older CLIs) and sets
+# output.percyScreenshotPath / output.percyUsesFilePath for downstream steps.
+- runScript: ../scripts/percy-prepare-screenshot.js
+- takeScreenshot: ${output.percyScreenshotPath}
 - runScript: ../scripts/percy-screenshot.js

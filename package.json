@@ -1,6 +1,6 @@
 {
   "name": "@percy/maestro-app",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.2",
   "description": "Percy SDK for Maestro mobile testing — visual testing for Android and iOS Maestro flows on BrowserStack",
   "license": "MIT",
   "author": "Perceptual Inc.",
