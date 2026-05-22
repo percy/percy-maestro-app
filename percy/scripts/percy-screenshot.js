@@ -111,6 +111,25 @@ try {
         var h = parseInt(PERCY_SCREEN_HEIGHT);
         if (!isNaN(h)) tag.height = h;
       }
+      // iOS pre-CoreDevice carve-out signal: on iOS 14/15/16 the BS host
+      // cannot auto-detect screen dimensions (devicectl is iOS 17+). If the
+      // customer has removed the env vars following the new zero-config docs,
+      // they'll silently end up with no tag dims here, which breaks
+      // element-region masking and produces broken visual diffs. Emit a
+      // clearly-named WARN so the limitation is discoverable in percy_cli.log
+      // rather than a silent foot-gun.
+      if (maestro.platform === "ios"
+          && (tag.width == null || tag.height == null)
+          && typeof PERCY_OS_VERSION !== "undefined" && PERCY_OS_VERSION) {
+        var osNum = parseFloat(PERCY_OS_VERSION);
+        if (!isNaN(osNum) && osNum < 17) {
+          console.log("[percy] WARN: iOS " + PERCY_OS_VERSION
+            + " is pre-CoreDevice; PERCY_SCREEN_WIDTH/HEIGHT are NOT auto-injected"
+            + " by the BS host on iOS 14/15/16. Set them explicitly in your"
+            + " flow YAML's runFlow.env block to keep element-region masking"
+            + " correct. See: https://github.com/percy/percy-maestro-app#device-metadata-auto-detection");
+        }
+      }
       if (typeof PERCY_ORIENTATION !== "undefined" && PERCY_ORIENTATION) {
         tag.orientation = PERCY_ORIENTATION;
       }
@@ -165,6 +184,34 @@ try {
           }
         } catch (regionsError) {
           console.log("[percy] Warning: invalid PERCY_REGIONS JSON, skipping regions");
+        }
+      }
+
+      // Ignore regions — parity with appium-python kwarg ignore_regions_*.
+      // Each item is the SAME shape as PERCY_REGIONS (coordinate or element);
+      // algorithm is implicit ('ignore'). Emits to the cli relay's
+      // ignoreRegions[] input, which forwards to
+      // payload.ignoredElementsData.ignoreElementsData[] on the comparison.
+      if (typeof PERCY_IGNORE_REGIONS !== "undefined" && PERCY_IGNORE_REGIONS) {
+        try {
+          var parsedIgnore = json(PERCY_IGNORE_REGIONS);
+          if (parsedIgnore && parsedIgnore.length) {
+            payload.ignoreRegions = parsedIgnore;
+          }
+        } catch (igErr) {
+          console.log("[percy] Warning: invalid PERCY_IGNORE_REGIONS JSON, skipping");
+        }
+      }
+
+      // Consider regions — parity with appium-python consider_regions_*.
+      if (typeof PERCY_CONSIDER_REGIONS !== "undefined" && PERCY_CONSIDER_REGIONS) {
+        try {
+          var parsedConsider = json(PERCY_CONSIDER_REGIONS);
+          if (parsedConsider && parsedConsider.length) {
+            payload.considerRegions = parsedConsider;
+          }
+        } catch (coErr) {
+          console.log("[percy] Warning: invalid PERCY_CONSIDER_REGIONS JSON, skipping");
         }
       }
 

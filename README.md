@@ -130,14 +130,27 @@ Device metadata and other options are passed as environment variables to your Ma
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `SCREENSHOT_NAME` | Yes (per screenshot) | - | Name for the screenshot; must be unique per snapshot. **Must match `[a-zA-Z0-9_-]+`** — see [Snapshot naming](#snapshot-naming). |
-| `PERCY_SERVER` | No | `http://percy.cli:5338` | Percy CLI server address |
-| `PERCY_DEVICE_NAME` | Yes | - | Device name for the Percy tag (e.g. `Pixel 7`) |
-| `PERCY_OS_VERSION` | Yes | - | OS version (e.g. `13` for Android, `17` for iOS) |
-| `PERCY_SCREEN_WIDTH` | Yes | - | Screen width in pixels |
-| `PERCY_SCREEN_HEIGHT` | Yes | - | Screen height in pixels |
+| `PERCY_SERVER` | No¹ | `http://percy.cli:5338` | Percy CLI server address |
+| `PERCY_DEVICE_NAME` | Yes² | - | Device name for the Percy tag (e.g. `Pixel 7`) |
+| `PERCY_OS_VERSION` | Yes² | - | OS version (e.g. `13` for Android, `17` for iOS) |
+| `PERCY_SCREEN_WIDTH` | Yes³ | - | Screen width in pixels |
+| `PERCY_SCREEN_HEIGHT` | Yes³ | - | Screen height in pixels |
 | `PERCY_ORIENTATION` | No | `portrait` | Screen orientation (`portrait` or `landscape`) |
 | `PERCY_TEST_CASE` | No | - | Test case name for grouping snapshots |
 | `PERCY_LABELS` | No | - | Comma-separated labels for the snapshot |
+
+¹ `PERCY_SERVER` is auto-injected by the BS host on BrowserStack App Automate
+(per-session CLI port discovered automatically). Self-hosted users only.
+
+² On BrowserStack App Automate, `PERCY_DEVICE_NAME` and `PERCY_OS_VERSION`
+are auto-injected by the BS host. Self-hosted users (Maestro Cloud, local
+CI, customer device labs) must still set them in the flow YAML.
+
+³ On BrowserStack App Automate, `PERCY_SCREEN_WIDTH` / `PERCY_SCREEN_HEIGHT`
+are auto-injected ON ANDROID and ON iOS 17+. **On iOS 14/15/16 they MUST
+still be set manually** — the host uses `xcrun devicectl` to derive screen
+size, and that tool is iOS 17+ only. Self-hosted users also still set them.
+See [Device metadata auto-detection](#device-metadata-auto-detection) below.
 
 ### Comparison Options
 
@@ -162,6 +175,73 @@ npx percy app:exec -- maestro test \
   -e PERCY_NAV_BAR_HEIGHT="48" \
   your-flow.yaml
 ```
+
+### Device metadata auto-detection
+
+On **BrowserStack App Automate**, the BS host runner auto-injects six env
+vars into your Maestro flow, so the customer-facing YAML stays minimal:
+
+```yaml
+- runFlow:
+    file: percy/flows/percy-screenshot.yaml
+    env:
+      SCREENSHOT_NAME: "My_Screenshot"
+      PERCY_ORIENTATION: "portrait"
+      # That's it — the 6 vars below come from the BS host.
+```
+
+#### What's auto-detected (on BS App Automate)
+
+| Variable | Source on Android | Source on iOS |
+|---|---|---|
+| `PERCY_SESSION_ID` | BS session lifecycle | BS session lifecycle |
+| `PERCY_SERVER` | Per-session Percy CLI port | Per-session Percy CLI port |
+| `PERCY_DEVICE_NAME` | Session params (`user_device_name`) | Session params (`user_device_name`) |
+| `PERCY_OS_VERSION` | Session params | `@device_config['device_version']` |
+| `PERCY_SCREEN_WIDTH` | `adb shell wm size` | `device_config['device_resolution']` (iOS 17+ only — see Coverage below) |
+| `PERCY_SCREEN_HEIGHT` | `adb shell wm size` | `device_config['device_resolution']` (iOS 17+ only) |
+
+#### Coverage matrix
+
+| Environment | Android | iOS 17+ | iOS 14/15/16 |
+|---|---|---|---|
+| BrowserStack App Automate | ✅ all 6 auto-injected | ✅ all 6 auto-injected | ⚠️ `PERCY_SCREEN_WIDTH/HEIGHT` must still be set manually; other 4 still auto-injected |
+| Self-hosted Maestro (Maestro Cloud, local CI, customer device labs) | ❌ customer sets all 6 | ❌ customer sets all 6 | ❌ customer sets all 6 |
+
+The iOS 14/15/16 carve-out exists because the BS host derives screen
+dimensions via `xcrun devicectl device info displays`, and `devicectl` is
+a CoreDevice tool that only works on iOS 17+. The SDK emits a clear WARN
+to `percy_cli.log` if it detects this case (`iOS X.Y is pre-CoreDevice;
+PERCY_SCREEN_WIDTH/HEIGHT are NOT auto-injected...`).
+
+#### Migration paths (existing customers)
+
+If you already have working baselines with the env vars hardcoded in your
+flow YAML, **you have three options**:
+
+- **Path A — keep your env vars (zero disruption):** Maestro `runFlow.env`
+  shadows the host-injected values. Your existing YAML continues to win;
+  no baseline change. **No baseline reset.**
+- **Path B — remove env vars + approve once (zero-config future):** On
+  your next build after removing them, Percy sees new tag dims (the host
+  values, which may differ from your previously-declared marketed
+  resolution) and treats affected snapshots as new — requires a one-time
+  approval, after which subsequent builds compare against the corrected
+  baseline. **One-time baseline reset per snapshot; recommended for new
+  projects.**
+- **Path C — partial hardcoding (e.g., set `PERCY_DEVICE_NAME` but not
+  screen dims):** After this update, the missing fields auto-inject on
+  your next build — your affected snapshots will see a one-time baseline
+  reset on the newly-populated fields. Review your next build's baselines
+  and approve as needed.
+
+#### When you'll see baseline-reset behavior
+
+- Any snapshot whose tag dims (`width`/`height`) change between builds —
+  Percy uses tag values to identify same-device snapshot families, so a
+  change in any tag field creates a new family.
+- Switching to Path B (or partial Path C) is the trigger; staying on
+  Path A means zero impact.
 
 ### Snapshot naming
 
