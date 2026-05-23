@@ -111,25 +111,11 @@ try {
         var h = parseInt(PERCY_SCREEN_HEIGHT);
         if (!isNaN(h)) tag.height = h;
       }
-      // iOS pre-CoreDevice carve-out signal: on iOS 14/15/16 the BS host
-      // cannot auto-detect screen dimensions (devicectl is iOS 17+). If the
-      // customer has removed the env vars following the new zero-config docs,
-      // they'll silently end up with no tag dims here, which breaks
-      // element-region masking and produces broken visual diffs. Emit a
-      // clearly-named WARN so the limitation is discoverable in percy_cli.log
-      // rather than a silent foot-gun.
-      if (maestro.platform === "ios"
-          && (tag.width == null || tag.height == null)
-          && typeof PERCY_OS_VERSION !== "undefined" && PERCY_OS_VERSION) {
-        var osNum = parseFloat(PERCY_OS_VERSION);
-        if (!isNaN(osNum) && osNum < 17) {
-          console.log("[percy] WARN: iOS " + PERCY_OS_VERSION
-            + " is pre-CoreDevice; PERCY_SCREEN_WIDTH/HEIGHT are NOT auto-injected"
-            + " by the BS host on iOS 14/15/16. Set them explicitly in your"
-            + " flow YAML's runFlow.env block to keep element-region masking"
-            + " correct. See: https://github.com/percy/percy-maestro-app#device-metadata-auto-detection");
-        }
-      }
+      // Note: tag.width / tag.height left undefined here are filled in by the
+      // Percy CLI relay from the screenshot PNG header bytes (see the
+      // /percy/maestro-screenshot handler). The PNG is the authoritative
+      // source for screen dimensions. Customers don't need to set
+      // PERCY_SCREEN_WIDTH / PERCY_SCREEN_HEIGHT for this to work.
       if (typeof PERCY_ORIENTATION !== "undefined" && PERCY_ORIENTATION) {
         tag.orientation = PERCY_ORIENTATION;
       }
