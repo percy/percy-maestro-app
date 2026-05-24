@@ -4,6 +4,42 @@ All notable changes to `@percy/maestro-app` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.3] — 2026-05-25
+
+Revert the "SDK owns the path" mode introduced in `1.0.0-beta.2`. The SDK now always passes a bare relative `SCREENSHOT_NAME` to `takeScreenshot:` and never sends a `filePath` field to the Percy CLI relay. The CLI relay's legacy glob finds the file at the runner-injected `SCREENSHOTS_DIR` layout — the same battle-tested path that was the only path in production before `1.0.0-beta.2`.
+
+### Why this regression existed
+
+`1.0.0-beta.2`'s prepare script constructed an **absolute** screenshot path (`/tmp/<sid>_test_suite/percy/<NAME>` on Android, `/tmp/<sid>/percy/<NAME>` on iOS) and passed it to `takeScreenshot:`. The design rested on the assumption that `takeScreenshot:` honors absolute paths as-is. Per-version Maestro source-code audit on 2026-05-25 showed this is not how Maestro behaves on the versions BrowserStack runs:
+
+- **Android pool — Maestro 1.39.13 / "1.39.15"** uses `new File(screenshotsDir, suppliedPath)` at [`Orchestra.kt:812-820`](https://github.com/mobile-dev-inc/maestro/blob/cli-1.39.13/maestro-orchestra/src/main/java/maestro/orchestra/Orchestra.kt#L812-L820). Per the JDK [`File(File, String)` Javadoc](https://docs.oracle.com/javase/8/docs/api/java/io/File.html#File-java.io.File-java.lang.String-): "If the child pathname string is absolute then it is converted into a relative pathname in a system-dependent way." On POSIX, this produces a **doubled path**: `<SCREENSHOTS_DIR>/tmp/<sid>_test_suite/percy/<NAME>.png`. The SDK then sends the un-doubled SDK-chosen path as `payload.filePath` to the relay; the relay's realpath check resolves the SDK's path (which doesn't exist on disk), returns `404 Screenshot not found`, and the build fails with `"Snapshot command was not called"`. ("1.39.15" in BS internal session logs is a BS-patched derivative of upstream 1.39.13; latest upstream 1.39.x tag is 1.39.13.)
+- **iOS pool — Maestro 2.0.7** uses `screenshotsDir.resolve(pathStr).toFile()` at [`Orchestra.kt:943-952`](https://github.com/mobile-dev-inc/maestro/blob/cli-2.0.7/maestro-orchestra/src/main/java/maestro/orchestra/Orchestra.kt#L943-L952). Per the JDK [`Path.resolve(String)` Javadoc](https://docs.oracle.com/javase/8/docs/api/java/nio/file/Path.html#resolve-java.lang.String-): "If the other parameter is an absolute path then this method trivially returns other." iOS therefore should not produce a doubled path on POSIX — yet the surface symptom is identical (`"Snapshot command was not called"`) on the iOS host. The exact iOS failure mechanism is not yet captured live (candidates: realmobile wrapper layer concatenation, missing `mkdir -p` for the SDK-chosen `/tmp/<sid>/percy/` directory, or `${output.percyScreenshotPath}` interpolation in the YAML dropping a leading `/`). The fix sidesteps all three.
+
+The regression was masked in production only because every BS host today pins `@percy/core@1.30.0` — which fails the SDK's `coreSupportsFilePath` version gate at `≥ 1.31.11-beta.1` and silently falls back to the relative `SCREENSHOT_NAME` path. The moment `bs-nixpkgs` bumps the percy-cli derivation to a release containing the `filePath`-accepting code (PR [cli#2217](https://github.com/percy/cli/pull/2217)), every Maestro + Percy build on BrowserStack would regress on day one across both platforms with a silent zero-snapshot symptom.
+
+### Changed
+
+- **`percy/scripts/percy-prepare-screenshot.js`** — removed the `coreSupportsFilePath` version-gate helper, the `canUseFilePath` evaluation, and the absolute-path branch. The script now always sets `output.percyScreenshotPath` to the bare relative `SCREENSHOT_NAME` (or `"percy-screenshot"` fallback if unset). The inline healthcheck self-init is unchanged.
+- **`percy/scripts/percy-screenshot.js`** — removed the `payload.filePath` assignment. The script no longer reads `output.percyUsesFilePath`. The on-the-wire POST body to `/percy/maestro-screenshot` becomes a strict subset of the `1.0.0-beta.2` payload (only the `filePath` field is dropped); all other fields including `regions` / `ignoreRegions` / `considerRegions` / `tag` / `clientInfo` are unchanged.
+
+### Compatibility
+
+- **All Percy CLI versions** — identical SDK behavior. The version gate is gone. The CLI relay's `/percy/maestro-screenshot` `filePath` accept code at `cli/packages/core/src/api.js:375-385` stays in place (no breaking change for hypothetical external clients) but is no longer exercised by this SDK.
+- **All Maestro versions** — `takeScreenshot:` path-joining behavior for **relative** paths has been consistent since v0; the file lands under `SCREENSHOTS_DIR`, where the CLI relay's legacy glob finds it.
+- **Regions, sync mode, tag metadata, fullscreen, status/nav bar heights** — all unchanged from `1.0.0-beta.2`.
+
+### Rollout sequencing (required)
+
+This SDK release **must** land in `bs-nixpkgs` and deploy to the BS host fleet **before** any `@percy/cli` derivation bump to a version containing PR cli#2217. If the cli bump lands first, prod regresses. The recommended `bs-nixpkgs` PR shape is a standalone SDK-derivation bump that explicitly blocks the future cli pin change.
+
+### `clientInfo`
+
+Telemetry string bumps from `percy-maestro-app/1.0.0-beta.2` to `percy-maestro-app/1.0.0-beta.3` per the bump checklist in [`RELEASING.md`](./RELEASING.md).
+
+### Plan
+
+Full planning context, system-wide impact audit, and Go/No-Go rollout checklist: [`docs/plans/2026-05-25-001-fix-sdk-percy-screenshot-path-relative-plan.md`](./docs/plans/2026-05-25-001-fix-sdk-percy-screenshot-path-relative-plan.md).
+
 ## [1.0.0-beta.2] — 2026-05-12
 
 Decouple the screenshot save path from the BrowserStack-infra `SCREENSHOTS_DIR` convention. The SDK now owns the path end-to-end when the running Percy CLI supports the new `filePath` field on `/percy/maestro-screenshot`; older CLIs fall back to the existing behavior with no customer-visible change. Surfaced by build `0444158…` where a BS-infra patch put PNGs one directory level too shallow relative to the CLI's hardcoded glob and snapshots silently failed with `"Snapshot command was not called"`.

@@ -226,20 +226,8 @@ try {
       }
 
       payload.platform = maestro.platform;
-      payload.clientInfo = "percy-maestro-app/1.0.0-beta.2";
+      payload.clientInfo = "percy-maestro-app/1.0.0-beta.3";
       payload.environmentInfo = "percy-maestro";
-
-      // filePath: forward the absolute path set by percy-prepare-screenshot.js
-      // when the running CLI supports it. The flag is set in prepare; this
-      // script only reads it. Older CLIs that don't recognise filePath fall
-      // through to the legacy glob — but in that case prepare leaves
-      // percyUsesFilePath false, so we omit the field entirely.
-      // Append `.png` here because percyScreenshotPath omits the extension
-      // (Maestro's takeScreenshot: auto-appends it, so prepare leaves it
-      // off to avoid `<name>.png.png` on disk).
-      if (output.percyUsesFilePath && output.percyScreenshotPath) {
-        payload.filePath = output.percyScreenshotPath + ".png";
-      }
 
       // POST to the relay endpoint — Percy CLI reads the file from disk
       console.log("[percy] Uploading: " + SCREENSHOT_NAME);

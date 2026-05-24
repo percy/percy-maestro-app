@@ -1,20 +1,15 @@
 // percy-prepare-screenshot.js
 // Runs immediately BEFORE the `takeScreenshot:` step inside the
-// percy-screenshot subflow. Decides where Maestro should save the
-// screenshot — either an absolute path the SDK owns (new path, used when
-// the running Percy CLI supports the /percy/maestro-screenshot `filePath`
-// field) or the legacy relative SCREENSHOT_NAME (back-compat for older
-// CLIs that still rely on the BS-infra SCREENSHOTS_DIR contract).
+// percy-screenshot subflow. Sets `output.percyScreenshotPath` to the
+// bare relative SCREENSHOT_NAME so Maestro writes the file under the
+// runner-injected SCREENSHOTS_DIR, where the CLI relay's legacy glob
+// finds it.
 //
-// Sets two output variables consumed by the rest of the subflow:
-//   output.percyScreenshotPath  - the value passed to `takeScreenshot:`.
-//                                 Always set, even on disabled / legacy
-//                                 paths, so `${percyScreenshotPath}` is
-//                                 never unset at interpolation time.
-//   output.percyUsesFilePath    - true when the upload script should
-//                                 forward the path as the `filePath`
-//                                 payload field; false on legacy /
-//                                 disabled paths.
+// Sets one output variable consumed by the rest of the subflow:
+//   output.percyScreenshotPath - the value passed to `takeScreenshot:`.
+//                                Always set, even on disabled / error
+//                                paths, so `${percyScreenshotPath}`
+//                                interpolation in the YAML never fails.
 //
 // Self-initialises Percy on first call (same shape as the inline
 // healthcheck in percy-screenshot.js) so the customer-facing flow is
@@ -71,71 +66,16 @@ function runPercyHealthcheckInline() {
   }
 }
 
-// Returns true if the running @percy/core recognises the
-// /percy/maestro-screenshot `filePath` field. Minimum: 1.31.11-beta.1
-// (commit 36f9c56c — feat(core): accept optional filePath in
-// /percy/maestro-screenshot relay). Unknown or malformed version strings
-// degrade safely to false, keeping older customers on the legacy glob.
-function coreSupportsFilePath(coreVersion) {
-  if (!coreVersion || typeof coreVersion !== "string") return false;
-  var v = coreVersion.replace(/^v/, "");
-  var m = v.match(/^(\d+)\.(\d+)\.(\d+)(?:-([a-zA-Z][a-zA-Z0-9]*)(?:\.(\d+))?)?/);
-  if (!m) return false;
-  var major = parseInt(m[1]);
-  var minor = parseInt(m[2]);
-  var patch = parseInt(m[3]);
-  var preTag = m[4];
-  var preNum = m[5] ? parseInt(m[5]) : 0;
-
-  if (major > 1) return true;
-  if (major < 1) return false;
-  if (minor > 31) return true;
-  if (minor < 31) return false;
-  if (patch > 11) return true;
-  if (patch < 11) return false;
-  if (!preTag) return true;                  // 1.31.11 production release
-  if (preTag !== "beta") return false;       // unknown prerelease tag
-  return preNum >= 1;                        // beta.1+ supports filePath
-}
-
 try {
-  // Always-set defaults so YAML `${percyScreenshotPath}` interpolation has a
-  // valid value even on disabled / error paths. Falling back to the raw
-  // SCREENSHOT_NAME preserves the pre-existing (relative-path) behaviour.
+  // Always-set default so YAML `${percyScreenshotPath}` interpolation has a
+  // valid value even on disabled / error paths. The relative SCREENSHOT_NAME
+  // makes Maestro write to <SCREENSHOTS_DIR>/<NAME>.png — the layout the CLI
+  // relay's legacy glob expects on both Android and iOS.
   var fallbackName = (typeof SCREENSHOT_NAME !== "undefined" && SCREENSHOT_NAME) ? SCREENSHOT_NAME : "percy-screenshot";
   output.percyScreenshotPath = fallbackName;
-  output.percyUsesFilePath = false;
 
   if (typeof output.percyEnabled === "undefined") {
     runPercyHealthcheckInline();
-  }
-
-  if (output.percyEnabled) {
-    var canUseFilePath =
-      typeof SCREENSHOT_NAME !== "undefined" && SCREENSHOT_NAME &&
-      /^[a-zA-Z0-9_-]+$/.test(SCREENSHOT_NAME) &&
-      typeof PERCY_SESSION_ID !== "undefined" && PERCY_SESSION_ID &&
-      coreSupportsFilePath(output.percyCoreVersion);
-
-    if (canUseFilePath) {
-      // New path: SDK owns the screenshot location, under the existing BS
-      // session root so cleanup is inherited.
-      //   Android  → /tmp/<sid>_test_suite/percy/<name>(.png appended by Maestro)
-      //   iOS      → /tmp/<sid>/percy/<name>(.png appended by Maestro)
-      // Maestro's `takeScreenshot:` auto-appends `.png` — do NOT include it
-      // in the path here, otherwise the file lands at `<name>.png.png`.
-      // percy-screenshot.js appends `.png` when constructing the filePath
-      // it sends to the CLI relay so both ends agree on the final filename.
-      if (maestro.platform === "ios") {
-        output.percyScreenshotPath = "/tmp/" + PERCY_SESSION_ID + "/percy/" + SCREENSHOT_NAME;
-      } else {
-        output.percyScreenshotPath = "/tmp/" + PERCY_SESSION_ID + "_test_suite/percy/" + SCREENSHOT_NAME;
-      }
-      output.percyUsesFilePath = true;
-    }
-    // Otherwise: stay on the SCREENSHOT_NAME fallback. The upload script
-    // surfaces the specific reason (invalid name, missing session id,
-    // legacy CLI) via its existing log lines — keep one source of truth.
   }
 } catch (error) {
   // Never fail the customer's Maestro flow because of Percy bookkeeping.
