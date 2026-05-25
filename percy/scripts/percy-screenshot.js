@@ -209,23 +209,41 @@ try {
 
       // Tile metadata — system-chrome masking.
       //
-      // Match the default-mask-chrome convention used by every other Percy mobile SDK:
-      //   percy-espresso-java reads `status_bar_height` / `navigation_bar_height` from
-      //     Android system resources at runtime (non-zero on every real device).
-      //   percy-xcui-swift falls back to 44 for unknown iPhones and 20 for iPads.
-      //   percy-appium-python uses Appium driver introspection with a static device
-      //     table fallback.
+      // Values are in IMAGE PIXELS (the unit Percy's comparison tile expects),
+      // not in points / dp. Other Percy mobile SDKs that have access to the
+      // device scale factor multiply their point-unit lookup tables at runtime:
+      //   percy-xcui-swift  → `mapToDeviceStatusBar(...) * UIScreen.main.scale`
+      //   percy-espresso-java → `Resources.getDimensionPixelSize(...)`
+      //   percy-appium-python → reads pixel-unit `viewportRect` from the driver
       //
-      // Maestro/GraalJS has no equivalent introspection path (no Resources.getSystem(),
-      // no driver.get_system_bars()). Defaulting both to 0 — the prior behaviour —
-      // contributes false-positive diffs for the clock, battery, signal-bar, and
-      // home-indicator regions on every snapshot.
+      // GraalJS-inside-Maestro can't reach `UIScreen.main.scale` or
+      // `DisplayMetrics.density`, so we ship platform-typical pixel constants
+      // sized for the most common BS App Automate device tiers. The constants
+      // are intentionally CONSERVATIVE — better to leave a thin sliver of the
+      // status bar visible in the diff than to mask actual app content.
       //
-      // Platform-typical values (cover modern Pixel-class Android + notched iPhone 12+
-      // out of the box; customers running e.g. iPhone 14 Pro / Dynamic Island override
-      // via PERCY_STATUS_BAR_HEIGHT). Customer env vars always win.
-      payload.statusBarHeight = maestro.platform === "ios" ? 47 : 80;
-      payload.navBarHeight    = maestro.platform === "ios" ? 0  : 100;
+      //   iOS:     iPhone 12 / 13 / 14 (3x scale) is the dominant test target;
+      //            the dynamic clock/signal-icon glyphs sit at y = [50, 83]
+      //            empirically. 100 covers the changing chrome with room to
+      //            spare. iPhone 11 (2x, status bar 88 px) overflows by 12 px
+      //            into the safe-area; most apps absorb that without visible
+      //            content loss. Dynamic Island devices (iPhone 14 Pro+, status
+      //            bar 162 px) and iPhone SE (status 40 px) should override
+      //            PERCY_STATUS_BAR_HEIGHT for an exact safe-area fit.
+      //            Nav bar 80 covers the iPhone 11 home indicator (34pt × 2 =
+      //            68 px) with the same 12-px overflow margin used on
+      //            statusBar. iPhone 12+ home indicator is 34pt × 3 = 102 px;
+      //            a thin ~22 px sliver may remain — acceptable since the
+      //            indicator itself isn't dynamic content. iPad and iPhone SE
+      //            (no home indicator) should override PERCY_NAV_BAR_HEIGHT="0".
+      //   Android: Pixel-class at 3x density (24dp status bar ≈ 72 px → 80 px
+      //            covers comfortably). Nav bar 100 covers gesture-nav.
+      //            3-button-nav devices (48dp ≈ 144 px) need override to ~144.
+      //
+      // Customer env vars PERCY_STATUS_BAR_HEIGHT / PERCY_NAV_BAR_HEIGHT always
+      // override the defaults below.
+      payload.statusBarHeight = maestro.platform === "ios" ? 100 : 80;
+      payload.navBarHeight    = maestro.platform === "ios" ? 80  : 100;
 
       if (typeof PERCY_STATUS_BAR_HEIGHT !== "undefined" && PERCY_STATUS_BAR_HEIGHT) {
         var sbh = parseInt(PERCY_STATUS_BAR_HEIGHT);

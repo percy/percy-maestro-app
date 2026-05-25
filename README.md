@@ -157,8 +157,8 @@ See [Device metadata auto-detection](#device-metadata-auto-detection) below.
 |----------|----------|---------|-------------|
 | `PERCY_REGIONS` | No | - | JSON array of regions for ignore/consider (see [Regions](#regions)) |
 | `PERCY_SYNC` | No | `false` | Set to `"true"` to wait for comparison result and log details |
-| `PERCY_STATUS_BAR_HEIGHT` | No | Android: `80` &nbsp;·&nbsp; iOS: `47` | Status bar height in pixels (excluded from comparison tile). Defaults cover modern Pixel-class Android and notched iPhone 12+. Override for taller Dynamic Island devices (iPhone 14 Pro+) or non-standard hardware. |
-| `PERCY_NAV_BAR_HEIGHT` | No | Android: `100` &nbsp;·&nbsp; iOS: `0` | Navigation bar height in pixels (excluded from comparison tile). Android default covers gesture-nav + 3-button nav. iOS has no persistent nav bar. |
+| `PERCY_STATUS_BAR_HEIGHT` | No | Android: `80` &nbsp;·&nbsp; iOS: `100` | Status bar height in **image pixels** (excluded from comparison tile). Defaults cover Pixel-class Android (~72 px actual) and the dynamic clock / signal-icon zone on iPhone 12 / 13 / 14 at 3x scale (changing pixels at y ≤ ~85). Override to `180` on Dynamic Island devices (iPhone 14 Pro+), `88` on iPhone 11 / XR, or `40` on iPhone SE for an exact safe-area fit. |
+| `PERCY_NAV_BAR_HEIGHT` | No | Android: `100` &nbsp;·&nbsp; iOS: `80` | Bottom-bar / home-indicator height in **image pixels** (excluded from comparison tile). Android default covers gesture-nav home indicator (~72 px actual). iOS default covers the iPhone 11 (2x) home indicator at ~68 px; iPhone 12+ (3x) home indicator is ~102 px — override to `102` for a tighter fit. iPad / iPhone SE (no home indicator) should set `0`. Android 3-button-nav devices should override to `144`. |
 | `PERCY_FULLSCREEN` | No | `false` | Set to `"true"` if the screenshot is fullscreen (no system chrome) |
 | `PERCY_TH_TEST_CASE_EXECUTION_ID` | No | - | Test harness execution ID for CI/CD correlation |
 
@@ -257,13 +257,22 @@ Why the strict pattern: the CLI uses the name to build a filesystem glob (`/tmp/
 The SDK auto-detects the platform via `maestro.platform` — no flag change needed
 between Android and iOS flows.
 
-- **`PERCY_NAV_BAR_HEIGHT`**: iOS has no persistent navigation bar; the SDK defaults
-  to `0` on iOS. Omit this env var on iOS flows.
-- **`PERCY_STATUS_BAR_HEIGHT`**: defaults to `47` on iOS (covers the notch on iPhone
-  12 / 13 / 14). Override if your device's safe-area is taller — typical values:
-  - iPhone 14 Pro / 15 / 16 (Dynamic Island): `59`
-  - iPhone 13/14 (notch): `47` (default)
-  - iPhone SE (no notch): `20`
+- **`PERCY_NAV_BAR_HEIGHT`**: iOS has no persistent navigation bar, but Face-ID
+  iPhones have a home indicator at the bottom. The SDK defaults to `80` image-px
+  on iOS — covers iPhone 11 (2x) home indicator (~68 px) with a small margin.
+  Override in image pixels for a tighter fit:
+  - iPhone 12 / 13 / 14 / 15 / 16 (3x, home indicator ~102 px): `102` (34pt × 3)
+  - iPhone 11 / XR (2x, home indicator ~68 px): `68` (default covers fully)
+  - iPad / iPhone SE (no home indicator): `0`
+- **`PERCY_STATUS_BAR_HEIGHT`**: defaults to `100` image-pixels on iOS — covers
+  the dynamic clock / signal-icon zone on iPhone 12 / 13 / 14 at 3x scale
+  (changing chrome empirically sits at y ≤ ~85). iPhone 11 (2x, status bar 88 px)
+  is over-masked by 12 px — most apps absorb this in their safe-area background
+  without visible content loss. Override in image pixels for a tighter fit:
+  - iPhone 14 Pro / 15 / 16 (Dynamic Island, 3x): `180` (54pt × 3)
+  - iPhone 12 / 13 / 14 standard (notch, 3x): `100` (default — full clock zone)
+  - iPhone 11 / XR (notch, 2x): `88` (44pt × 2 — exact fit)
+  - iPhone SE (no notch, 2x): `40` (20pt × 2 — exact fit)
 - **`PERCY_DEVICE_NAME`**: set to the user-visible device name (e.g. `iPhone 15 Pro`).
 - **`PERCY_OS_VERSION`**: iOS major version (e.g. `17`).
 - **`PERCY_SCREEN_WIDTH` / `PERCY_SCREEN_HEIGHT`**: device physical pixel
