@@ -222,21 +222,22 @@ try {
       // are intentionally CONSERVATIVE — better to leave a thin sliver of the
       // status bar visible in the diff than to mask actual app content.
       //
-      //   iOS:     iPhone 11 (2x, status bar 88 px) is the realistic smallest
-      //            modern test target. 80 sits safely under that. On iPhone 14
-      //            at 3x (status bar 141 px), the dynamic content (clock /
-      //            signal-bar glyphs) sits in y = [50, 83] empirically — so 80
-      //            covers ~94% of the changing chrome. Customers seeing residual
-      //            diffs near the top should bump PERCY_STATUS_BAR_HEIGHT to ~100
-      //            (iPhone 14 family) or ~180 (Dynamic Island devices).
+      //   iOS:     iPhone 12 / 13 / 14 (3x scale) is the dominant test target;
+      //            the dynamic clock/signal-icon glyphs sit at y = [50, 83]
+      //            empirically. 100 covers the changing chrome with room to
+      //            spare. iPhone 11 (2x, status bar 88 px) overflows by 12 px
+      //            into the safe-area; most apps absorb that without visible
+      //            content loss. Dynamic Island devices (iPhone 14 Pro+, status
+      //            bar 162 px) and iPhone SE (status 40 px) should override
+      //            PERCY_STATUS_BAR_HEIGHT for an exact safe-area fit.
       //   Android: Pixel-class at 3x density (24dp status bar ≈ 72 px → 80 px
       //            covers comfortably). Nav bar 100 covers gesture-nav.
       //            3-button-nav devices (48dp ≈ 144 px) need override to ~144.
       //
       // Customer env vars PERCY_STATUS_BAR_HEIGHT / PERCY_NAV_BAR_HEIGHT always
       // override the defaults below.
-      payload.statusBarHeight = maestro.platform === "ios" ? 80 : 80;
-      payload.navBarHeight    = maestro.platform === "ios" ? 0  : 100;
+      payload.statusBarHeight = maestro.platform === "ios" ? 100 : 80;
+      payload.navBarHeight    = maestro.platform === "ios" ? 0   : 100;
 
       if (typeof PERCY_STATUS_BAR_HEIGHT !== "undefined" && PERCY_STATUS_BAR_HEIGHT) {
         var sbh = parseInt(PERCY_STATUS_BAR_HEIGHT);
