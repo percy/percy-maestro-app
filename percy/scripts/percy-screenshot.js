@@ -207,7 +207,26 @@ try {
         console.log("[percy] Sync mode enabled");
       }
 
-      // Tile metadata
+      // Tile metadata — system-chrome masking.
+      //
+      // Match the default-mask-chrome convention used by every other Percy mobile SDK:
+      //   percy-espresso-java reads `status_bar_height` / `navigation_bar_height` from
+      //     Android system resources at runtime (non-zero on every real device).
+      //   percy-xcui-swift falls back to 44 for unknown iPhones and 20 for iPads.
+      //   percy-appium-python uses Appium driver introspection with a static device
+      //     table fallback.
+      //
+      // Maestro/GraalJS has no equivalent introspection path (no Resources.getSystem(),
+      // no driver.get_system_bars()). Defaulting both to 0 — the prior behaviour —
+      // contributes false-positive diffs for the clock, battery, signal-bar, and
+      // home-indicator regions on every snapshot.
+      //
+      // Platform-typical values (cover modern Pixel-class Android + notched iPhone 12+
+      // out of the box; customers running e.g. iPhone 14 Pro / Dynamic Island override
+      // via PERCY_STATUS_BAR_HEIGHT). Customer env vars always win.
+      payload.statusBarHeight = maestro.platform === "ios" ? 47 : 80;
+      payload.navBarHeight    = maestro.platform === "ios" ? 0  : 100;
+
       if (typeof PERCY_STATUS_BAR_HEIGHT !== "undefined" && PERCY_STATUS_BAR_HEIGHT) {
         var sbh = parseInt(PERCY_STATUS_BAR_HEIGHT);
         if (!isNaN(sbh)) payload.statusBarHeight = sbh;
@@ -226,7 +245,7 @@ try {
       }
 
       payload.platform = maestro.platform;
-      payload.clientInfo = "percy-maestro-app/1.0.0-beta.3";
+      payload.clientInfo = "percy-maestro-app/1.0.0-beta.4";
       payload.environmentInfo = "percy-maestro";
 
       // POST to the relay endpoint — Percy CLI reads the file from disk

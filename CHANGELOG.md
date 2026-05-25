@@ -4,6 +4,32 @@ All notable changes to `@percy/maestro-app` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.4] — 2026-05-25
+
+Mask system chrome (status bar + Android nav bar) by default. Brings parity with every other Percy mobile SDK — `percy-espresso-java` reads the Android `status_bar_height` / `navigation_bar_height` system resources at runtime, `percy-xcui-swift` uses a device-keyed lookup table with a non-zero fallback, `percy-appium-python` uses Appium driver introspection plus a static device table. Maestro/GraalJS has no equivalent introspection path, so we ship platform-typical constants and let customers override via existing env vars.
+
+### Changed
+
+- **`percy/scripts/percy-screenshot.js`** — `payload.statusBarHeight` and `payload.navBarHeight` now ship with non-zero platform defaults:
+  - **iOS**: `statusBarHeight = 47` (covers notched iPhone 12 / 13 / 14), `navBarHeight = 0` (iOS has no persistent nav bar)
+  - **Android**: `statusBarHeight = 80` (covers modern Pixel-class hardware at typical 24-28dp density), `navBarHeight = 100` (covers gesture-nav home indicator and 3-button nav alike)
+  - `PERCY_STATUS_BAR_HEIGHT` and `PERCY_NAV_BAR_HEIGHT` env vars always override the defaults — the override path is unchanged.
+
+### Why this matters
+
+Before this release, every Maestro snapshot from this SDK contributed false-positive pixel diffs from the system clock, battery icon, signal strength, and (on Android) the gesture indicator / 3-button nav region. Customers had to know to set `PERCY_STATUS_BAR_HEIGHT` / `PERCY_NAV_BAR_HEIGHT` to opt into the masking behaviour that every other Percy mobile SDK applied automatically. Defaults move us to behaviour parity.
+
+### Customer migration
+
+None required — this is a behaviour improvement, not a breaking change. Two notes:
+
+- Customers who were explicitly setting `PERCY_STATUS_BAR_HEIGHT="0"` or `PERCY_NAV_BAR_HEIGHT="0"` to **disable** masking will continue to get those exact values (override path unchanged). However, an unset env var now defaults to the platform constants above.
+- Customers running Dynamic Island devices (iPhone 14 Pro / 15 / 16) or non-default Android hardware should continue to override `PERCY_STATUS_BAR_HEIGHT` for an exact safe-area fit.
+
+### `clientInfo`
+
+Telemetry string bumps from `percy-maestro-app/1.0.0-beta.3` to `percy-maestro-app/1.0.0-beta.4`.
+
 ## [1.0.0-beta.3] — 2026-05-25
 
 Revert the "SDK owns the path" mode introduced in `1.0.0-beta.2`. The SDK now always passes a bare relative `SCREENSHOT_NAME` to `takeScreenshot:` and never sends a `filePath` field to the Percy CLI relay. The CLI relay's legacy glob finds the file at the runner-injected `SCREENSHOTS_DIR` layout — the same battle-tested path that was the only path in production before `1.0.0-beta.2`.
