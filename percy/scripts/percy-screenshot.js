@@ -230,6 +230,12 @@ try {
       //            content loss. Dynamic Island devices (iPhone 14 Pro+, status
       //            bar 162 px) and iPhone SE (status 40 px) should override
       //            PERCY_STATUS_BAR_HEIGHT for an exact safe-area fit.
+      //            Nav bar 80 covers the iPhone 11 home indicator (34pt × 2 =
+      //            68 px) with the same 12-px overflow margin used on
+      //            statusBar. iPhone 12+ home indicator is 34pt × 3 = 102 px;
+      //            a thin ~22 px sliver may remain — acceptable since the
+      //            indicator itself isn't dynamic content. iPad and iPhone SE
+      //            (no home indicator) should override PERCY_NAV_BAR_HEIGHT="0".
       //   Android: Pixel-class at 3x density (24dp status bar ≈ 72 px → 80 px
       //            covers comfortably). Nav bar 100 covers gesture-nav.
       //            3-button-nav devices (48dp ≈ 144 px) need override to ~144.
@@ -237,7 +243,7 @@ try {
       // Customer env vars PERCY_STATUS_BAR_HEIGHT / PERCY_NAV_BAR_HEIGHT always
       // override the defaults below.
       payload.statusBarHeight = maestro.platform === "ios" ? 100 : 80;
-      payload.navBarHeight    = maestro.platform === "ios" ? 0   : 100;
+      payload.navBarHeight    = maestro.platform === "ios" ? 80  : 100;
 
       if (typeof PERCY_STATUS_BAR_HEIGHT !== "undefined" && PERCY_STATUS_BAR_HEIGHT) {
         var sbh = parseInt(PERCY_STATUS_BAR_HEIGHT);

@@ -11,11 +11,12 @@ Mask system chrome (status bar + Android nav bar) by default. Brings parity with
 ### Changed
 
 - **`percy/scripts/percy-screenshot.js`** — `payload.statusBarHeight` and `payload.navBarHeight` now ship with non-zero platform defaults, expressed in **image pixels** (the unit Percy's comparison tile expects). Defaults are intentionally conservative — they prefer leaving a sliver of the status bar visible over masking actual app content:
-  - **iOS**: `statusBarHeight = 100` (covers the dynamic clock / signal-icon zone on iPhone 12 / 13 / 14 at 3x scale, where empirically the changing pixels live at y ≤ ~85). `navBarHeight = 0` (iOS has no persistent nav bar).
+  - **iOS**: `statusBarHeight = 100` (covers the dynamic clock / signal-icon zone on iPhone 12 / 13 / 14 at 3x scale, where empirically the changing pixels live at y ≤ ~85). `navBarHeight = 80` (covers the iPhone 11 home indicator at 34pt × 2 = 68 px with a 12 px margin; iPhone 12+ home indicator is 34pt × 3 = 102 px and leaves a ~22 px sliver visible — acceptable since the indicator isn't dynamic content).
   - **Android**: `statusBarHeight = 80` (covers modern Pixel-class hardware at 3x density — 24dp × 3 ≈ 72 px), `navBarHeight = 100` (covers gesture-nav home indicator).
   - `PERCY_STATUS_BAR_HEIGHT` and `PERCY_NAV_BAR_HEIGHT` env vars always override the defaults. Customers should override on:
-    - Dynamic Island devices (iPhone 14 Pro / 15 / 16 family): `PERCY_STATUS_BAR_HEIGHT="180"`
-    - iPhone 11 / XR (2x notch, status 88 px) for an exact safe-area fit: `PERCY_STATUS_BAR_HEIGHT="88"`
+    - Dynamic Island devices (iPhone 14 Pro / 15 / 16 family): `PERCY_STATUS_BAR_HEIGHT="180"`, `PERCY_NAV_BAR_HEIGHT="102"`
+    - iPhone 11 / XR (2x notch, status 88 px) for an exact safe-area fit: `PERCY_STATUS_BAR_HEIGHT="88"`, `PERCY_NAV_BAR_HEIGHT="68"`
+    - iPad / iPhone SE (no home indicator): `PERCY_NAV_BAR_HEIGHT="0"`
     - iPhone SE (2x, no notch): `PERCY_STATUS_BAR_HEIGHT="40"`
     - Android 3-button-nav devices (48dp nav): `PERCY_NAV_BAR_HEIGHT="144"`
 
