@@ -157,8 +157,8 @@ See [Device metadata auto-detection](#device-metadata-auto-detection) below.
 |----------|----------|---------|-------------|
 | `PERCY_REGIONS` | No | - | JSON array of regions for ignore/consider (see [Regions](#regions)) |
 | `PERCY_SYNC` | No | `false` | Set to `"true"` to wait for comparison result and log details |
-| `PERCY_STATUS_BAR_HEIGHT` | No | `0` | Status bar height in pixels (excluded from comparison tile) |
-| `PERCY_NAV_BAR_HEIGHT` | No | `0` | Navigation bar height in pixels (excluded from comparison tile) |
+| `PERCY_STATUS_BAR_HEIGHT` | No | Android: `80` &nbsp;·&nbsp; iOS: `47` | Status bar height in pixels (excluded from comparison tile). Defaults cover modern Pixel-class Android and notched iPhone 12+. Override for taller Dynamic Island devices (iPhone 14 Pro+) or non-standard hardware. |
+| `PERCY_NAV_BAR_HEIGHT` | No | Android: `100` &nbsp;·&nbsp; iOS: `0` | Navigation bar height in pixels (excluded from comparison tile). Android default covers gesture-nav + 3-button nav. iOS has no persistent nav bar. |
 | `PERCY_FULLSCREEN` | No | `false` | Set to `"true"` if the screenshot is fullscreen (no system chrome) |
 | `PERCY_TH_TEST_CASE_EXECUTION_ID` | No | - | Test harness execution ID for CI/CD correlation |
 
@@ -257,12 +257,12 @@ Why the strict pattern: the CLI uses the name to build a filesystem glob (`/tmp/
 The SDK auto-detects the platform via `maestro.platform` — no flag change needed
 between Android and iOS flows.
 
-- **`PERCY_NAV_BAR_HEIGHT`**: iOS has no persistent navigation bar. Omit this env
-  var on iOS flows (the SDK will not add the field; the CLI defaults to 0).
-- **`PERCY_STATUS_BAR_HEIGHT`**: include the notch / Dynamic Island in the value
-  if you want the full safe-area excluded from the comparison tile. Typical values:
-  - iPhone 14 Pro (Dynamic Island): `59`
-  - iPhone 13/14 (notch): `47`
+- **`PERCY_NAV_BAR_HEIGHT`**: iOS has no persistent navigation bar; the SDK defaults
+  to `0` on iOS. Omit this env var on iOS flows.
+- **`PERCY_STATUS_BAR_HEIGHT`**: defaults to `47` on iOS (covers the notch on iPhone
+  12 / 13 / 14). Override if your device's safe-area is taller — typical values:
+  - iPhone 14 Pro / 15 / 16 (Dynamic Island): `59`
+  - iPhone 13/14 (notch): `47` (default)
   - iPhone SE (no notch): `20`
 - **`PERCY_DEVICE_NAME`**: set to the user-visible device name (e.g. `iPhone 15 Pro`).
 - **`PERCY_OS_VERSION`**: iOS major version (e.g. `17`).
