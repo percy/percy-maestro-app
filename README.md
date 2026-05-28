@@ -141,8 +141,12 @@ Device metadata and other options are passed as environment variables to your Ma
 
 ¹ On BrowserStack App Automate, `PERCY_SERVER`, `PERCY_DEVICE_NAME`, and
 `PERCY_OS_VERSION` are auto-injected by the BS host. Self-hosted Maestro
-users (Maestro Cloud, local CI, customer device labs) must set them
-manually in the flow YAML.
+users (local dev, CI, customer device labs) pass `PERCY_DEVICE_NAME` and
+`PERCY_OS_VERSION` as Maestro `-e` flags; `PERCY_SERVER` may be picked
+up from `PERCY_SERVER_ADDRESS` (exported by `percy app:exec`) if Maestro
+propagates the parent env into GraalJS — otherwise set it explicitly to
+your CLI's address (typically `http://localhost:5338`). See
+[Self-Hosted Maestro](#self-hosted-maestro) for the full walkthrough.
 
 ² `PERCY_SCREEN_WIDTH` / `PERCY_SCREEN_HEIGHT` are auto-derived from the
 screenshot PNG bytes by the Percy CLI relay — works on any iOS version,
@@ -210,13 +214,17 @@ tag dims are pixel-exact by construction.
   per-snapshot, not per-device.
 - Region masks (`PERCY_REGIONS`, etc.) — these are per-snapshot intent.
 
-#### Self-hosted Maestro
+#### Self-hosted Maestro (non-BrowserStack)
 
-If you run Maestro outside BS App Automate (Maestro Cloud, local CI,
-customer device labs), set `PERCY_SESSION_ID`, `PERCY_SERVER`,
-`PERCY_DEVICE_NAME`, and `PERCY_OS_VERSION` manually in your flow YAML.
-Screen dimensions still come from the PNG relay — no manual work needed
-there regardless of where Maestro runs.
+If you run Maestro outside BS App Automate (local dev, CI, your own
+device labs), do **not** set `PERCY_SESSION_ID` — its absence is the
+self-hosted detection signal at the Percy CLI relay. Pass
+`PERCY_DEVICE_NAME` and `PERCY_OS_VERSION` as Maestro `-e` flags; point
+the CLI relay at the directory Maestro writes screenshots to via
+`PERCY_MAESTRO_SCREENSHOT_DIR`. Screen dimensions continue to come from
+the PNG header regardless of host. See [Self-Hosted Maestro
+(non-BrowserStack)](#self-hosted-maestro-non-browserstack) below for the
+full walkthrough.
 
 #### Customer override
 
@@ -404,7 +412,12 @@ PERCY_REGIONS: '[{"element":{"resource-id":"com.app:id/clock"},"algorithm":"igno
 
 ## Runtime support
 
-This SDK is supported on **BrowserStack Maestro sessions** (Android and iOS). The Percy CLI's `/percy/maestro-screenshot` relay expects BrowserStack's session-directory file layout (`/tmp/{sessionId}_test_suite/logs/*/screenshots/{name}.png`). Running `maestro test` locally on your laptop is not a supported runtime — the healthcheck will pass but screenshot uploads will 404.
+This SDK supports two runtimes (Android and iOS for both):
+
+- **BrowserStack Maestro sessions** — zero-config, the host injects everything. See [BrowserStack Integration](#browserstack-integration).
+- **Self-hosted Maestro** (local dev, CI, customer device labs / device farms) — `percy app:exec -- maestro test ...` on a machine where the Percy CLI co-runs with `maestro`. See [Self-Hosted Maestro (non-BrowserStack)](#self-hosted-maestro-non-browserstack).
+
+A black-box SaaS device cloud where you cannot run the Percy CLI on the same host as `maestro test` is not a supported runtime (the relay reads the PNG from disk and the SDK POSTs to it over loopback).
 
 ## BrowserStack Integration
 
@@ -470,6 +483,97 @@ The `appPercy.env` sub-object can carry any `PERCY_*` environment variable your 
 
 See the [BrowserStack Maestro documentation](https://www.browserstack.com/docs/app-automate/maestro/getting-started) for the general upload/build flow.
 
+## Self-Hosted Maestro (non-BrowserStack)
+
+If you run `maestro test` yourself — local dev, CI, your own device farm — Percy works the same way as the Percy Appium SDK: you wrap your test runner with `percy app:exec`. The Percy CLI must co-run with `maestro test` on the same host (shared filesystem + localhost reachable from Maestro's GraalJS context).
+
+### Quickstart
+
+**1. Install the SDK** (Mode B from the [Installation](#installation) section so `runFlow:` paths resolve):
+
+```bash
+npm install --save-dev @percy/maestro-app @percy/cli
+cp -r node_modules/@percy/maestro-app/percy ./percy
+```
+
+**2. Run it** — point Maestro at a known output directory and tell Percy that directory:
+
+```bash
+export PERCY_TOKEN=<your-percy-token>
+export PERCY_MAESTRO_SCREENSHOT_DIR="$PWD/.percy-output"
+
+npx percy app:exec -- maestro test \
+  --test-output-dir "$PERCY_MAESTRO_SCREENSHOT_DIR" \
+  -e PERCY_DEVICE_NAME="Pixel 7" \
+  -e PERCY_OS_VERSION="13" \
+  your-flow.yaml
+```
+
+That's the full setup. `percy app:exec` starts the Percy CLI on localhost, creates the build, runs `maestro test` as a child, finalizes the build on exit. Inside the flow, every `runFlow: percy/flows/percy-screenshot.yaml` step takes a screenshot and uploads it.
+
+### What's auto-managed vs. what you set
+
+| | Self-hosted | BrowserStack |
+|---|---|---|
+| Start command | `percy app:exec -- maestro test ...` (you own it) | Upload zip to BS Maestro API with `appPercy` |
+| `PERCY_SERVER` | auto-managed by `app:exec` (`PERCY_SERVER_ADDRESS` if Maestro propagates parent env, else fall through to the default and set explicitly if needed) | host-injected |
+| `PERCY_MAESTRO_SCREENSHOT_DIR` | **required** — point at your `--test-output-dir` | n/a (host injects `SCREENSHOTS_DIR` internally) |
+| `PERCY_DEVICE_NAME`, `PERCY_OS_VERSION` | **you set** via Maestro `-e` flags | host-injected |
+| `tag.width` / `tag.height` | auto (from PNG header) | auto (from PNG header) |
+| Element regions on iOS | auto-discovered (probe `7001`, then `lsof`) — see below | host-injects driver port |
+| Element regions on Android | auto-discovered via `maestro hierarchy` (requires `adb`) | same |
+
+### Two env channels — don't conflate them
+
+This is the one thing customers commonly get wrong. Maestro and the Percy CLI relay read environment variables from **different places**:
+
+- **Device *tags*** are consumed by the SDK *inside* the Maestro flow (GraalJS). Pass them as Maestro `-e` flags: `-e PERCY_DEVICE_NAME=... -e PERCY_OS_VERSION=...`. These propagate into `runScript:` and `runFlow:`.
+- **Device *addressing*** for element-region resolution (`PERCY_IOS_DRIVER_HOST_PORT`, `PERCY_IOS_DEVICE_UDID`, `ANDROID_SERIAL`) is consumed by the **Percy CLI** (the relay process). **Export them in the shell before `percy app:exec`** — Maestro `-e` flags only reach the maestro child and its GraalJS context, never the CLI process.
+
+### Element regions
+
+- **Android** works out of the box if `adb` is on `PATH` and exactly one device is connected (or `ANDROID_SERIAL` is set). The relay shells `maestro hierarchy` to resolve element selectors.
+- **iOS** uses the BrowserStack-proven HTTP `/viewHierarchy` transport against the running Maestro driver. The relay auto-discovers the driver port — first probing the deterministic `127.0.0.1:7001` (and the `7001–7128` range for sharded runs), then falling back to `lsof` lookup of the `maestro-driver-ios…xctrunner` listener. Zero customer config on current Maestro (≤ 2.4.0). For real iOS devices, sharded runs, or future Maestro versions that switch to an ephemeral port, set `PERCY_IOS_DRIVER_HOST_PORT` explicitly (export in the shell before `percy app:exec`).
+- iOS selectors are restricted to `id` only on this SDK (Maestro's iOS TreeNode doesn't carry `class`/`text`); use `id` selectors or coordinate regions on iOS.
+
+When no driver is reachable, element regions are dropped with a clear warning — the snapshot itself still uploads with coordinate regions intact.
+
+### Multiple devices in one build
+
+Each device = one `percy app:exec` invocation on its own port. To merge concurrent sessions into a **single** Percy build, set a shared parallel nonce on all of them (Percy's existing cross-process build sharding):
+
+```bash
+# device 1
+PERCY_PARALLEL_NONCE=run-42 PERCY_PARALLEL_TOTAL=2 \
+  percy app:exec --port 5338 -- maestro test \
+  --test-output-dir "$PWD/.percy-out-1" \
+  -e PERCY_DEVICE_NAME="Pixel 7" -e PERCY_OS_VERSION="13" \
+  flow.yaml &
+
+# device 2
+PERCY_PARALLEL_NONCE=run-42 PERCY_PARALLEL_TOTAL=2 \
+  percy app:exec --port 5339 -- maestro test \
+  --test-output-dir "$PWD/.percy-out-2" \
+  -e PERCY_DEVICE_NAME="iPhone 14" -e PERCY_OS_VERSION="17" \
+  flow.yaml &
+```
+
+Each invocation needs its own `--port`, its own `--test-output-dir` (and matching `PERCY_MAESTRO_SCREENSHOT_DIR`), and its own device. Omit the parallel nonce to ship each session as a separate build.
+
+### Token hygiene
+
+`PERCY_TOKEN` is a write secret. Source it from your CI secret store; never commit it to flow YAML or echo it in logs. Set it once in the shell before `percy app:exec` so it inherits into the CLI process.
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `400 Missing required env: PERCY_MAESTRO_SCREENSHOT_DIR` | env var not set in the shell `percy app:exec` runs in | export it before the command |
+| `404 Screenshot not found … (resolved outside PERCY_MAESTRO_SCREENSHOT_DIR)` | Maestro wrote the PNG outside the configured dir | confirm `--test-output-dir` matches `PERCY_MAESTRO_SCREENSHOT_DIR` exactly |
+| `[percy] Percy CLI not reachable at http://percy.cli:5338` | self-hosted, Maestro didn't propagate `PERCY_SERVER_ADDRESS` to GraalJS | pass `-e PERCY_SERVER=http://localhost:5338` to `maestro test` |
+| Element regions skipped with `no Maestro driver found` on iOS | running a real device or a sharded setup | export `PERCY_IOS_DRIVER_HOST_PORT=<P>` matching your `--driver-host-port` |
+| Element regions skipped on Android with `adb` warning | `adb` not on `PATH` or zero/multiple devices | install Android Platform Tools and either connect one device or set `ANDROID_SERIAL` |
+
 ## How it works
 
 The Percy Maestro SDK works in two stages:
@@ -494,8 +598,7 @@ These features are blocked by the Maestro / BrowserStack / GraalJS runtime itsel
 | XPath region selectors on Android | Android view hierarchy does not expose XPath. | Use `resource-id` / `text` / `content-desc` / `class` instead. |
 | Auto-detect device metadata on iOS | Maestro's GraalJS sandbox blocks native iOS bindings (`uname`, `UIDevice.current`, `XCUIDevice.shared.orientation`) that SDKs like `percy-xcui-swift` use. | Pass `PERCY_DEVICE_NAME`, `PERCY_OS_VERSION`, `PERCY_SCREEN_WIDTH`, `PERCY_SCREEN_HEIGHT`, `PERCY_ORIENTATION` via flow env vars. |
 | Percy on Automate (POA) | POA requires Appium-style driver capabilities and a live session; Maestro has no equivalent execution model. | Use standard Percy snapshot uploads (this SDK) for Maestro-on-BrowserStack. |
-| iOS simulator | BrowserStack runs real iOS devices; the SDK is not tested against simulators. | Use BrowserStack real-device iOS sessions. |
-| Local `maestro test` runtime | The CLI relay expects BrowserStack's session-directory file layout. | Run on BrowserStack Maestro. See [Runtime support](#runtime-support). |
+| iOS simulator on BrowserStack | BrowserStack runs real iOS devices; the SDK is not tested against BS simulators. iOS simulators **are** supported on the self-hosted path. | Use BrowserStack real-device iOS sessions, or run self-hosted against a local iOS simulator. |
 
 ### Deferred / on roadmap
 
