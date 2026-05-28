@@ -25,7 +25,14 @@ function runPercyHealthcheckInline() {
       return;
     }
 
+    // Default kept as `percy.cli:5338` for strict BS R7 (BS host configures
+    // `percy.cli` as a DNS alias routed via privoxy). PERCY_SERVER_ADDRESS is
+    // exported by `percy app:exec` for self-hosted; PERCY_SERVER (explicit)
+    // wins over both.
     var hcServer = "http://percy.cli:5338";
+    if (typeof PERCY_SERVER_ADDRESS !== "undefined" && PERCY_SERVER_ADDRESS) {
+      hcServer = PERCY_SERVER_ADDRESS;
+    }
     if (typeof PERCY_SERVER !== "undefined" && PERCY_SERVER) {
       hcServer = PERCY_SERVER;
     }
@@ -84,15 +91,21 @@ try {
     if (!/^[a-zA-Z0-9_-]+$/.test(SCREENSHOT_NAME)) {
       throw new Error("[percy] SCREENSHOT_NAME must match [a-zA-Z0-9_-]+ (alphanumeric, underscore, hyphen). Got: \"" + SCREENSHOT_NAME + "\"");
     }
-    if (typeof PERCY_SESSION_ID === "undefined" || !PERCY_SESSION_ID) {
-      console.log("[percy] PERCY_SESSION_ID not set — cannot upload screenshot. Is appPercy enabled?");
-    } else {
-      // Build the request payload — just name + session ID
-      // Percy CLI handles finding the file, reading, base64-encoding
+    // Build the request payload. `sessionId` is BrowserStack-host-injected
+    // (PERCY_SESSION_ID) and identifies the BS session for the relay's
+    // /tmp/{sessionId}{_test_suite} file-find. Its absence is the
+    // self-hosted detection signal on the relay — earlier SDK versions
+    // hard-required it and skipped the upload; that gate is removed so
+    // self-hosted runs upload against a self-hosted-aware relay
+    // (PERCY_MAESTRO_SCREENSHOT_DIR-scoped). Bare `{ ... }` block preserves
+    // the original indentation through the rest of the payload build.
+    {
       var payload = {
-        name: SCREENSHOT_NAME,
-        sessionId: PERCY_SESSION_ID
+        name: SCREENSHOT_NAME
       };
+      if (typeof PERCY_SESSION_ID !== "undefined" && PERCY_SESSION_ID) {
+        payload.sessionId = PERCY_SESSION_ID;
+      }
 
       // Add optional tag metadata if available
       var tag = { name: "Unknown Device" };
