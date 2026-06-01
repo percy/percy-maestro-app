@@ -1,0 +1,32 @@
+name: Release
+
+# Publishes @percy/maestro-app to npm when a GitHub Release is published.
+# Mirrors cli/.github/workflows/release.yml (token auth via NODE_AUTH_TOKEN).
+# Pre-release tags (vX.Y.Z-beta.N) go to the `beta` dist-tag; clean semver -> `latest`.
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      # Content audit per RELEASING.md — npm pack is the file-list authority.
+      - name: Verify tarball contents
+        run: bash .github/scripts/verify-pack.sh
+
+      - name: Publish
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == *-beta* || "${GITHUB_REF_NAME}" == *-rc* ]]; then
+            npm publish --tag beta --access public
+          else
+            npm publish --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
