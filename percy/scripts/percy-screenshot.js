@@ -237,12 +237,20 @@ try {
       //            indicator itself isn't dynamic content. iPad and iPhone SE
       //            (no home indicator) should override PERCY_NAV_BAR_HEIGHT="0".
       //   Android: Pixel-class at 3x density (24dp status bar ≈ 72 px → 80 px
-      //            covers comfortably). Nav bar 100 covers gesture-nav.
-      //            3-button-nav devices (48dp ≈ 144 px) need override to ~144.
+      //            covers comfortably). Bumped to 120 (2026-05-28) for newer
+      //            Pixel-class devices at higher resolutions (e.g. Pixel 10 Pro
+      //            at 1280×2856) where the status-bar chrome — clock, status
+      //            icons, camera punch-hole — extends past 80 px and otherwise
+      //            shows up as a strip diff between baseline and head. 120
+      //            balances coverage on modern high-DPI Pixels with a thin
+      //            sliver margin on 1080p Samsung / Pixel 6-8 tiers; very
+      //            tall status bars on 1280p+ devices may still need an
+      //            override. Nav bar 100 covers gesture-nav. 3-button-nav
+      //            devices (48dp ≈ 144 px) need override to ~144.
       //
       // Customer env vars PERCY_STATUS_BAR_HEIGHT / PERCY_NAV_BAR_HEIGHT always
       // override the defaults below.
-      payload.statusBarHeight = maestro.platform === "ios" ? 100 : 80;
+      payload.statusBarHeight = maestro.platform === "ios" ? 100 : 120;
       payload.navBarHeight    = maestro.platform === "ios" ? 80  : 100;
 
       if (typeof PERCY_STATUS_BAR_HEIGHT !== "undefined" && PERCY_STATUS_BAR_HEIGHT) {
