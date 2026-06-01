@@ -23,6 +23,8 @@ npm pack
 tar -tzf percy-maestro-app-X.Y.Z.tgz
 ```
 
+This audit is enforced automatically in CI — `.github/scripts/verify-pack.sh` asserts the exact list below, and runs both on every PR (the **Pack Audit** workflow) and as a pre-publish gate inside the **Release** workflow. A drift in the `files` whitelist fails the build before anything reaches npm. The manual command above is for local confirmation.
+
 Confirm the tarball contains exactly:
 
 - `package.json`
@@ -41,13 +43,9 @@ Anything else is a `files` whitelist mistake — fix it before continuing.
 
 `1.0.0` is effectively permanent — npm's unpublish window closes at 72 hours and is blocked outright if any consumer has installed the version. Every release goes through a beta soak first.
 
-1. Publish `X.Y.Z-beta.N` from CI:
+Publishing is **driven by GitHub Releases**, not by running `npm publish` by hand. The `.github/workflows/release.yml` workflow fires on `release: published`, runs the content audit, then publishes. It routes by tag name: a tag containing `-beta` (or `-rc`) publishes to the `beta` dist-tag; a clean `vX.Y.Z` tag publishes to `latest`. You never type `npm publish` — you cut a Release and the workflow does it.
 
-   ```sh
-   npm publish --tag beta --access public --provenance
-   ```
-
-   The `--tag beta` keeps the artifact off `latest`; consumers must opt in via `@beta`. The `--provenance` flag attaches a sigstore attestation linking the tarball to the source commit and CI run.
+1. Publish `X.Y.Z-beta.N`: push the bump commit, then create a GitHub Release tagged `vX.Y.Z-beta.N`. The Release workflow detects the `-beta` suffix and runs `npm publish --tag beta --access public`, keeping the artifact off `latest` — consumers must opt in via `@beta`.
 
 2. From a fresh scratch directory with no local link, install `@percy/maestro-app@beta` and confirm the installed file tree matches the offline-tarball install byte-for-byte. This catches `files`-whitelist or scope-permission bugs that local installs miss.
 
@@ -55,18 +53,14 @@ Anything else is a `files` whitelist mistake — fix it before continuing.
 
 4. Soak the beta on the registry for **48–72 hours minimum** before promoting. Iterate `beta.1`, `beta.2` if anything breaks — non-binding.
 
-5. Promote to the clean `X.Y.Z` (no `-beta` suffix) by bumping the three places in the checklist above and publishing without `--tag`:
+5. Promote to the clean `X.Y.Z` (no `-beta` suffix) by bumping the three places in the checklist above, pushing, and cutting a GitHub Release tagged `vX.Y.Z`. With no `-beta` suffix the workflow runs `npm publish --access public` (no `--tag`), so `latest` is set automatically. We deliberately publish a fresh `X.Y.Z` rather than `npm dist-tag add @beta.N latest` so the canonical install resolves to a clean semver string.
 
-   ```sh
-   npm publish --access public --provenance
-   ```
+## Auth
 
-   No `--tag` flag means `latest` is set automatically. We deliberately publish a fresh `X.Y.Z` rather than `npm dist-tag add @beta.N latest` so the canonical install resolves to a clean semver string.
-
-## Auth and provenance
-
-- **2FA-on-writes is required** for any `@percy`-scoped publish. Set with `npm profile enable-2fa auth-and-writes`.
-- **Publish from CI, not a laptop.** Use OIDC token exchange with `--provenance` so the tarball carries a sigstore attestation. Never publish with a long-lived `NPM_TOKEN`.
+- **Publish from CI, not a laptop.** The Release workflow authenticates to npm with `NODE_AUTH_TOKEN`, sourced from the `NPM_TOKEN` repository secret. This matches the publish setup across Percy SDK repos (e.g. `cli`).
+- **`NPM_TOKEN` must be an automation/granular token** with publish rights to the `@percy` scope. Automation tokens bypass the interactive 2FA-on-publish prompt, which is what lets CI publish unattended.
+- **Keep 2FA enabled on the human npm account** (`npm profile enable-2fa auth-only`) so the account that mints the token stays protected. CI publishes with the automation token, not your personal login.
+- **Never publish from a laptop** with the token. Rotate `NPM_TOKEN` if it is ever exposed.
 
 ## Rollback
 
