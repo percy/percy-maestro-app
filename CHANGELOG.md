@@ -4,6 +4,18 @@ All notable changes to `@percy/maestro-app` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`percy/scripts/percy-screenshot.js`** — adds `runtime` field to the `/percy/maestro-screenshot` POST payload. Value is `"browserstack"` when `PERCY_SESSION_ID` is set (BrowserStack-host-injected), `"selfhosted"` otherwise. Moves the self-hosted-vs-BS discriminator from an implicit relay-side check (`sessionId` absence) to an explicit SDK-side declaration. The relay continues to fall back to `sessionId` absence for backward compatibility with this and older SDK versions.
+
+  See [plan](docs/plans/2026-06-02-001-feat-explicit-runtime-field-plan.md) for the architectural rationale; the brittleness this addresses is documented [in the requirements doc](docs/brainstorms/2026-06-02-selfhosted-followup-bundle-requirements.md) (R2).
+
+  Wire-contract: additive, non-breaking. Older CLIs ignore the field; the SDK and relay are decoupled in their roll-out.
+
+  Companion CLI PR: [percy/cli#2264](https://github.com/percy/cli/pull/2264).
+
 ## [1.0.0-beta.4] — 2026-05-25
 
 Mask system chrome (status bar + Android nav bar) by default. Brings parity with every other Percy mobile SDK — `percy-espresso-java` reads the Android `status_bar_height` / `navigation_bar_height` system resources at runtime, `percy-xcui-swift` uses a device-keyed lookup table with a non-zero fallback, `percy-appium-python` uses Appium driver introspection plus a static device table. Maestro/GraalJS has no equivalent introspection path, so we ship platform-typical constants and let customers override via existing env vars.

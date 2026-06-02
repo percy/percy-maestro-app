@@ -93,15 +93,27 @@ try {
     }
     // Build the request payload. `sessionId` is BrowserStack-host-injected
     // (PERCY_SESSION_ID) and identifies the BS session for the relay's
-    // /tmp/{sessionId}{_test_suite} file-find. Its absence is the
-    // self-hosted detection signal on the relay — earlier SDK versions
-    // hard-required it and skipped the upload; that gate is removed so
-    // self-hosted runs upload against a self-hosted-aware relay
-    // (PERCY_MAESTRO_SCREENSHOT_DIR-scoped). Bare `{ ... }` block preserves
-    // the original indentation through the rest of the payload build.
+    // /tmp/{sessionId}{_test_suite} file-find. Earlier SDK versions
+    // hard-required it and skipped the upload self-hosted; that gate is
+    // removed so self-hosted runs upload against a self-hosted-aware relay
+    // (PERCY_MAESTRO_SCREENSHOT_DIR-scoped).
+    //
+    // `runtime` is the explicit self-hosted-vs-BrowserStack declaration.
+    // The relay prefers this field over the implicit sessionId-absent
+    // signal (relays that predate the field fall back to sessionId-absent;
+    // SDKs that predate the field emit the implicit signal alone). The
+    // SDK derives runtime from PERCY_SESSION_ID presence — the same
+    // discriminator that drove the implicit relay-side check before this
+    // SDK release. See plan:
+    //   docs/plans/2026-06-02-001-feat-explicit-runtime-field-plan.md
+    //
+    // Bare `{ ... }` block preserves indentation through the payload build.
     {
       var payload = {
-        name: SCREENSHOT_NAME
+        name: SCREENSHOT_NAME,
+        runtime: (typeof PERCY_SESSION_ID !== "undefined" && PERCY_SESSION_ID)
+          ? "browserstack"
+          : "selfhosted"
       };
       if (typeof PERCY_SESSION_ID !== "undefined" && PERCY_SESSION_ID) {
         payload.sessionId = PERCY_SESSION_ID;
