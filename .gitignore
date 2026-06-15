@@ -10,3 +10,7 @@ node_modules/
 
 # One-off staging
 .deploy-staging/
+
+# Test coverage artifacts
+coverage/
+.nyc_output/

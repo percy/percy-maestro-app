@@ -1,0 +1,10 @@
+{
+  "all": true,
+  "src": ["percy/scripts"],
+  "include": ["percy/scripts/**/*.js"],
+  "reporter": ["text", "text-summary"],
+  "lines": 100,
+  "check-coverage": true,
+  "skip-full": false,
+  "clean": true
+}

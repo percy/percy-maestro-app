@@ -1,0 +1,27 @@
+name: Test
+
+# Unit-tests the shipped GraalJS scripts (percy/scripts/*.js) via a node:vm
+# harness that emulates the Maestro host, and enforces 100% line coverage.
+# The production scripts are NOT modified — the harness executes them in place
+# from their real file paths so V8/c8 attribute coverage to the actual source.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Run unit tests
+        run: npm test
+      - name: Run coverage (100% line gate)
+        run: npm run coverage
