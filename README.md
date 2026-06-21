@@ -517,6 +517,11 @@ These are implemented partially or not yet and are expected to land in a future 
 | Sync mode (`PERCY_SYNC`) | Implemented in the SDK (accepts the env var and logs the sync result when the relay returns one) but unproven end-to-end on BrowserStack; a prior round saw a 403 on the sync-result query that is believed unrelated backend behavior. |
 | `PERCY_TH_TEST_CASE_EXECUTION_ID` dashboard rendering | The SDK forwards this field to the Percy backend (verified end-to-end). However, no Percy dashboard surface currently renders it — this is a `percy-api` serializer gap, tracked separately from this SDK. TestHub integrators can read the value from the Percy CLI debug log. |
 
+## Examples
+
+- **[example-percy-maestro](https://github.com/percy/example-percy-maestro)** — BrowserStack App Automate Maestro example. Use this when running on BrowserStack-hosted devices.
+- **[example-percy-maestro-selfhosted](https://github.com/percy/example-percy-maestro-selfhosted)** — Self-hosted (non-BrowserStack) Maestro example. Demonstrates the cli#2248 + cli#2254 self-hosted path with Android (Sample Calculator) and iOS (simulator + Settings) flows.
+
 ## Links
 
 - [Percy documentation](https://www.browserstack.com/docs/percy)
