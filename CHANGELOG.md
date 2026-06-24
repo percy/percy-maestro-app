@@ -4,7 +4,9 @@ All notable changes to `@percy/maestro-app` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0-beta.0] — 2026-06-24
+
+First pre-release of self-hosted (non-BrowserStack) Maestro support. Promotes the GraalJS-side changes from PR #7 — together with `@percy/cli@1.32.3-beta.0` — to make `percy app:exec -- maestro test <flow>.yaml` work end-to-end on customer-managed devices (local dev machines, Maestro Cloud, customer CI). Backward-compatible: BrowserStack App Automate runs are byte-identical to `1.0.0`.
 
 ### Added
 
@@ -14,7 +16,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
   Wire-contract: additive, non-breaking. Older CLIs ignore the field; the SDK and relay are decoupled in their roll-out.
 
-  Companion CLI PR: [percy/cli#2264](https://github.com/percy/cli/pull/2264).
+- **`percy/scripts/percy-healthcheck.js` + `percy-screenshot.js`** — `PERCY_SERVER_ADDRESS` added to the env-var read order alongside `PERCY_SERVER` (existing explicit) and the `http://percy.cli:5338` default (BS path). `PERCY_SERVER` continues to take precedence when both are set.
+
+### Changed
+
+- **`percy/scripts/percy-screenshot.js`** — relaxed the `PERCY_SESSION_ID` upload gate. Previously, the SDK skipped the upload entirely when `PERCY_SESSION_ID` was absent (BS-only assumption). Now the POST fires whether or not the session id is present; the CLI relay's `runtime`-aware handler picks the right file-find path.
+
+### `clientInfo`
+
+Telemetry string bumps from `percy-maestro-app/1.0.0` to `percy-maestro-app/1.1.0-beta.0`.
+
+### Customer migration
+
+None required. BrowserStack App Automate runs are unaffected — the `runtime` field is additive and `PERCY_SESSION_ID` is still honored when present. Self-hosted runs additionally need [`@percy/cli@1.32.3-beta.0`](https://github.com/percy/cli/releases/tag/1.32.3-beta.0) or later on the CLI side; older CLIs continue to use the implicit-sessionId-absence detection.
+
+Companion CLI PR: [percy/cli#2261](https://github.com/percy/cli/pull/2261).
+Customer ticket: PER-8599.
 
 ## [1.0.0] — 2026-06-01
 
