@@ -4,6 +4,18 @@ All notable changes to `@percy/maestro-app` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`percy/scripts/percy-screenshot.js`** — adds `runtime` field to the `/percy/maestro-screenshot` POST payload. Value is `"browserstack"` when `PERCY_SESSION_ID` is set (BrowserStack-host-injected), `"selfhosted"` otherwise. Moves the self-hosted-vs-BS discriminator from an implicit relay-side check (`sessionId` absence) to an explicit SDK-side declaration. The relay continues to fall back to `sessionId` absence for backward compatibility with this and older SDK versions.
+
+  See [plan](docs/plans/2026-06-02-001-feat-explicit-runtime-field-plan.md) for the architectural rationale; the brittleness this addresses is documented [in the requirements doc](docs/brainstorms/2026-06-02-selfhosted-followup-bundle-requirements.md) (R2).
+
+  Wire-contract: additive, non-breaking. Older CLIs ignore the field; the SDK and relay are decoupled in their roll-out.
+
+  Companion CLI PR: [percy/cli#2264](https://github.com/percy/cli/pull/2264).
+
 ## [1.0.0] — 2026-06-01
 
 First stable release of `@percy/maestro-app`. Promotes the `1.0.0-beta.x` line to stable with one behaviour change over `beta.4`: the default Android `statusBarHeight` is raised from `80` to `120`.

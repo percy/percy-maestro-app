@@ -31,7 +31,14 @@ function runPercyHealthcheckInline() {
       return;
     }
 
+    // Default kept as `percy.cli:5338` for strict BS R7 (BS host configures
+    // `percy.cli` as a DNS alias routed via privoxy). PERCY_SERVER_ADDRESS is
+    // exported by `percy app:exec` for self-hosted; PERCY_SERVER (explicit)
+    // wins over both.
     var hcServer = "http://percy.cli:5338";
+    if (typeof PERCY_SERVER_ADDRESS !== "undefined" && PERCY_SERVER_ADDRESS) {
+      hcServer = PERCY_SERVER_ADDRESS;
+    }
     if (typeof PERCY_SERVER !== "undefined" && PERCY_SERVER) {
       hcServer = PERCY_SERVER;
     }

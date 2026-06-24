@@ -21,7 +21,18 @@ try {
     console.log("[percy] Percy Maestro SDK supports Android and iOS only. Disabling Percy.");
     output.percyEnabled = false;
   } else {
+    // Default kept as `percy.cli:5338` for strict BS R7 (the BS host
+    // configures `percy.cli` as a DNS alias routed via privoxy to the
+    // per-session CLI port; it's the safe magic fallback on BS even in
+    // edge cases where the host's PERCY_SERVER injection misfires).
+    // For self-hosted: PERCY_SERVER_ADDRESS is exported by `percy app:exec`
+    // into the child env — if Maestro propagates parent env to GraalJS the
+    // SDK picks it up automatically; otherwise the customer sets PERCY_SERVER
+    // explicitly (documented in README).
     var percyServer = "http://percy.cli:5338";
+    if (typeof PERCY_SERVER_ADDRESS !== "undefined" && PERCY_SERVER_ADDRESS) {
+      percyServer = PERCY_SERVER_ADDRESS;
+    }
     if (typeof PERCY_SERVER !== "undefined" && PERCY_SERVER) {
       percyServer = PERCY_SERVER;
     }
