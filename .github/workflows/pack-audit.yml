@@ -1,0 +1,22 @@
+name: Pack Audit
+
+# The package is YAML + GraalJS (no build/lint/test scripts), so the meaningful
+# pre-merge check is: does the published tarball contain exactly the whitelisted
+# files? Catches accidental `files`-array changes before they reach npm.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  pack-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      - name: Verify tarball contents
+        run: bash .github/scripts/verify-pack.sh

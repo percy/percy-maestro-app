@@ -16,6 +16,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
   Companion CLI PR: [percy/cli#2264](https://github.com/percy/cli/pull/2264).
 
+## [1.0.0] — 2026-06-01
+
+First stable release of `@percy/maestro-app`. Promotes the `1.0.0-beta.x` line to stable with one behaviour change over `beta.4`: the default Android `statusBarHeight` is raised from `80` to `120`.
+
+### Changed
+
+- **`percy/scripts/percy-screenshot.js`** — default Android `payload.statusBarHeight` bumped `80 → 120` (image pixels). The `80` default was sized for 1080p 3x-density Pixels (24dp ≈ 72 px); on newer high-resolution Pixels (e.g. Pixel 10 Pro at 1280×2856) the status-bar chrome — clock, status icons, camera punch-hole — extends past 80 px and surfaced as a strip diff between baseline and head. `120` covers modern high-DPI Pixels while leaving a thin sliver margin on the 1080p Samsung / Pixel 6–8 tier. iOS defaults are unchanged (`statusBarHeight = 100`, `navBarHeight = 80`); Android `navBarHeight` unchanged (`100`).
+- `PERCY_STATUS_BAR_HEIGHT` / `PERCY_NAV_BAR_HEIGHT` env vars continue to override the defaults. Very tall status bars on 1280p+ devices may still need a per-flow `PERCY_STATUS_BAR_HEIGHT` override.
+
+### Customer migration
+
+None required — this is a default-tuning change, not a breaking change. Customers already setting `PERCY_STATUS_BAR_HEIGHT` keep their exact values.
+
+### `clientInfo`
+
+Telemetry string bumps from `percy-maestro-app/1.0.0-beta.4` to `percy-maestro-app/1.0.0`.
+
 ## [1.0.0-beta.4] — 2026-05-25
 
 Mask system chrome (status bar + Android nav bar) by default. Brings parity with every other Percy mobile SDK — `percy-espresso-java` reads the Android `status_bar_height` / `navigation_bar_height` system resources at runtime, `percy-xcui-swift` uses a device-keyed lookup table with a non-zero fallback, `percy-appium-python` uses Appium driver introspection plus a static device table. Maestro/GraalJS has no equivalent introspection path, so we ship platform-typical constants and let customers override via existing env vars.
