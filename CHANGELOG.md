@@ -4,6 +4,19 @@ All notable changes to `@percy/maestro-app` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0-beta.1] — 2026-06-25
+
+Second pre-release of the `1.1.0` self-hosted line. No customer-facing behaviour change over `1.1.0-beta.0` — this is a release-hygiene bump that completes the RELEASING.md "Bump checklist" the `beta.0` cut had left partially applied.
+
+### Changed
+
+- **`percy/scripts/percy-screenshot.js`** — `clientInfo` telemetry string bumps from `percy-maestro-app/1.1.0-beta.0` to `percy-maestro-app/1.1.0-beta.1`, keeping the embedded literal in lockstep with `package.json` per the bump checklist.
+
+### Fixed
+
+- **`package-lock.json`** — synced the root and `packages[""]` `version` (stale `1.0.0`) to the current `package.json` version.
+- **`test/unit/percy-screenshot.test.mjs`** — the `clientInfo` assertion now reads the expected version from `package.json` instead of hard-coding it, so it tracks future bumps automatically. Updated the missing-`PERCY_SESSION_ID` test to assert the current self-hosted upload behaviour (the upload-gate relaxation shipped in `1.1.0-beta.0`); it had still been asserting the pre-`beta.0` skip-and-log behaviour.
+
 ## [1.1.0-beta.0] — 2026-06-24
 
 First pre-release of self-hosted (non-BrowserStack) Maestro support. Promotes the GraalJS-side changes from PR #7 — together with `@percy/cli@1.32.3-beta.0` — to make `percy app:exec -- maestro test <flow>.yaml` work end-to-end on customer-managed devices (local dev machines, Maestro Cloud, customer CI). Backward-compatible: BrowserStack App Automate runs are byte-identical to `1.0.0`.

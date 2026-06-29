@@ -1,13 +1,27 @@
 // test/unit/percy-screenshot.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runScript, OK_RESPONSE, NOT_OK_RESPONSE, THROW } from './harness.mjs';
 
 const SS = '/percy/maestro-screenshot';
 // Derive the expected clientInfo version from package.json so this assertion
 // can't go stale on a version bump (was hardcoded to 1.0.0).
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
+
+// Read the version from package.json so the clientInfo assertion tracks the
+// release bump automatically and never goes stale. The shipped
+// percy-screenshot.js embeds the clientInfo string as a literal (GraalJS in
+// Maestro can't require package.json at runtime); the RELEASING.md "Bump
+// checklist" keeps the literal and package.json in lockstep, and this test is
+// the guard that they actually match.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PKG = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '..', '..', 'package.json'), 'utf8')
+);
+const EXPECTED_CLIENT_INFO = 'percy-maestro-app/' + PKG.version;
 
 // Helper: an "enabled" output so we skip self-init and go straight to the
 // upload path. percyServer set so the `output.percyServer || default` reads
@@ -67,6 +81,27 @@ test('self-init: PERCY_SERVER override used for healthcheck and upload', () => {
   });
   assert.equal(httpCalls.get[0][0], 'http://srv:1/percy/healthcheck');
   assert.equal(httpCalls.post[0][0], 'http://srv:1' + SS);
+});
+
+test('self-init: PERCY_SERVER_ADDRESS used; PERCY_SERVER wins when both set', () => {
+  const addrOnly = runScript('screenshot', {
+    platform: 'android',
+    env: { SCREENSHOT_NAME: 'home', PERCY_SESSION_ID: 's', PERCY_SERVER_ADDRESS: 'http://addr:5' },
+    http: { get: [OK_RESPONSE({})], post: [OK_RESPONSE()] },
+  });
+  assert.equal(addrOnly.httpCalls.get[0][0], 'http://addr:5/percy/healthcheck');
+  assert.equal(addrOnly.httpCalls.post[0][0], 'http://addr:5' + SS);
+
+  const both = runScript('screenshot', {
+    platform: 'android',
+    env: {
+      SCREENSHOT_NAME: 'home', PERCY_SESSION_ID: 's',
+      PERCY_SERVER_ADDRESS: 'http://addr:5', PERCY_SERVER: 'http://explicit:6',
+    },
+    http: { get: [OK_RESPONSE({})], post: [OK_RESPONSE()] },
+  });
+  assert.equal(both.httpCalls.get[0][0], 'http://explicit:6/percy/healthcheck');
+  assert.equal(both.httpCalls.post[0][0], 'http://explicit:6' + SS);
 });
 
 test('self-init: unsupported platform disables and skips upload', () => {
@@ -185,19 +220,22 @@ test('enabled with invalid SCREENSHOT_NAME → regex throw, caught, logged', () 
   assert.ok(logs.some((l) => l.includes('SCREENSHOT_NAME must match')));
 });
 
-test('enabled, valid name, MISSING session id → uploads as self-hosted runtime', () => {
+test('enabled, valid name, MISSING session id → uploads as selfhosted (no session-id gate)', () => {
+  // The PERCY_SESSION_ID upload gate was relaxed in 1.1.0-beta.0 (see
+  // CHANGELOG "Changed" + the runtime-field plan): a missing session id no
+  // longer skips the upload. The POST now fires with runtime "selfhosted" and
+  // no sessionId field; the CLI relay's runtime-aware handler picks the
+  // self-hosted file-find path.
   const { httpCalls } = runScript('screenshot', {
     platform: 'android',
     output: enabled(),
     env: { SCREENSHOT_NAME: 'home' },
+    http: { post: [OK_RESPONSE()] },
   });
-  // Self-hosted Maestro (1.1.0-beta.0): the old "require PERCY_SESSION_ID or
-  // skip upload" gate was removed. The upload now proceeds with runtime
-  // "selfhosted" and no sessionId in the payload.
-  assert.equal(httpCalls.post.length, 1);
+  assert.equal(httpCalls.post.length, 1, 'self-hosted upload fires without a session id');
   const payload = JSON.parse(httpCalls.post[0][1].body);
   assert.equal(payload.runtime, 'selfhosted');
-  assert.equal(payload.sessionId, undefined);
+  assert.equal(payload.sessionId, undefined, 'no sessionId field when PERCY_SESSION_ID absent');
 });
 
 // ---------------------------------------------------------------------------
@@ -217,7 +255,7 @@ test('android default tag/name/dimensions when env vars absent', () => {
   assert.equal(payload.statusBarHeight, 120);
   assert.equal(payload.navBarHeight, 100);
   assert.equal(payload.platform, 'android');
-  assert.equal(payload.clientInfo, `percy-maestro-app/${VERSION}`);
+  assert.equal(payload.clientInfo, EXPECTED_CLIENT_INFO);
   assert.equal(payload.environmentInfo, 'percy-maestro');
 });
 
