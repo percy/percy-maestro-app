@@ -1,9 +1,13 @@
 // test/unit/percy-screenshot.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { runScript, OK_RESPONSE, NOT_OK_RESPONSE, THROW } from './harness.mjs';
 
 const SS = '/percy/maestro-screenshot';
+// Derive the expected clientInfo version from package.json so this assertion
+// can't go stale on a version bump (was hardcoded to 1.0.0).
+const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
 // Helper: an "enabled" output so we skip self-init and go straight to the
 // upload path. percyServer set so the `output.percyServer || default` reads
@@ -181,14 +185,19 @@ test('enabled with invalid SCREENSHOT_NAME → regex throw, caught, logged', () 
   assert.ok(logs.some((l) => l.includes('SCREENSHOT_NAME must match')));
 });
 
-test('enabled, valid name, MISSING session id → logs and does not upload', () => {
-  const { httpCalls, logs } = runScript('screenshot', {
+test('enabled, valid name, MISSING session id → uploads as self-hosted runtime', () => {
+  const { httpCalls } = runScript('screenshot', {
     platform: 'android',
     output: enabled(),
     env: { SCREENSHOT_NAME: 'home' },
   });
-  assert.equal(httpCalls.post.length, 0);
-  assert.ok(logs.some((l) => l.includes('PERCY_SESSION_ID not set')));
+  // Self-hosted Maestro (1.1.0-beta.0): the old "require PERCY_SESSION_ID or
+  // skip upload" gate was removed. The upload now proceeds with runtime
+  // "selfhosted" and no sessionId in the payload.
+  assert.equal(httpCalls.post.length, 1);
+  const payload = JSON.parse(httpCalls.post[0][1].body);
+  assert.equal(payload.runtime, 'selfhosted');
+  assert.equal(payload.sessionId, undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -208,7 +217,7 @@ test('android default tag/name/dimensions when env vars absent', () => {
   assert.equal(payload.statusBarHeight, 120);
   assert.equal(payload.navBarHeight, 100);
   assert.equal(payload.platform, 'android');
-  assert.equal(payload.clientInfo, 'percy-maestro-app/1.0.0');
+  assert.equal(payload.clientInfo, `percy-maestro-app/${VERSION}`);
   assert.equal(payload.environmentInfo, 'percy-maestro');
 });
 
