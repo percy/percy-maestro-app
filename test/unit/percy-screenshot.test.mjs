@@ -7,9 +7,6 @@ import { fileURLToPath } from 'node:url';
 import { runScript, OK_RESPONSE, NOT_OK_RESPONSE, THROW } from './harness.mjs';
 
 const SS = '/percy/maestro-screenshot';
-// Derive the expected clientInfo version from package.json so this assertion
-// can't go stale on a version bump (was hardcoded to 1.0.0).
-const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
 // Read the version from package.json so the clientInfo assertion tracks the
 // release bump automatically and never goes stale. The shipped
