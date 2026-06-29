@@ -45,6 +45,24 @@ test('PERCY_SERVER env override is honoured', () => {
   assert.equal(httpCalls.get[0][0], 'http://localhost:9999' + HC);
 });
 
+test('PERCY_SERVER_ADDRESS used when set; PERCY_SERVER takes precedence when both set', () => {
+  // PERCY_SERVER_ADDRESS is the self-hosted `percy app:exec` export; it wins
+  // over the default but loses to an explicit PERCY_SERVER.
+  const addrOnly = runScript('healthcheck', {
+    platform: 'android',
+    env: { PERCY_SERVER_ADDRESS: 'http://addr:1' },
+    http: { get: [OK_RESPONSE({})] },
+  });
+  assert.equal(addrOnly.httpCalls.get[0][0], 'http://addr:1' + HC);
+
+  const both = runScript('healthcheck', {
+    platform: 'android',
+    env: { PERCY_SERVER_ADDRESS: 'http://addr:1', PERCY_SERVER: 'http://explicit:2' },
+    http: { get: [OK_RESPONSE({})] },
+  });
+  assert.equal(both.httpCalls.get[0][0], 'http://explicit:2' + HC);
+});
+
 test('4xx response → reachable-but-rejected banner, disabled', () => {
   const { output, logs } = runScript('healthcheck', {
     platform: 'android',
