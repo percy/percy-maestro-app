@@ -75,6 +75,22 @@ test('inline healthcheck: PERCY_SERVER override and no-version success', () => {
   assert.ok(logs.some((l) => l === '[percy] Percy CLI healthcheck passed.'));
 });
 
+test('inline healthcheck: PERCY_SERVER_ADDRESS used; PERCY_SERVER wins when both set', () => {
+  const addrOnly = runScript('prepare', {
+    platform: 'ios',
+    env: { SCREENSHOT_NAME: 'x', PERCY_SERVER_ADDRESS: 'http://addr:3' },
+    http: { get: [OK_RESPONSE({})] },
+  });
+  assert.equal(addrOnly.httpCalls.get[0][0], 'http://addr:3/percy/healthcheck');
+
+  const both = runScript('prepare', {
+    platform: 'ios',
+    env: { SCREENSHOT_NAME: 'x', PERCY_SERVER_ADDRESS: 'http://addr:3', PERCY_SERVER: 'http://explicit:4' },
+    http: { get: [OK_RESPONSE({})] },
+  });
+  assert.equal(both.httpCalls.get[0][0], 'http://explicit:4/percy/healthcheck');
+});
+
 test('inline healthcheck: 4xx disables with rejected banner', () => {
   const { output, logs } = runScript('prepare', {
     platform: 'android',
